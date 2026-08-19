@@ -1,0 +1,75 @@
+{
+  "annotations": { "list": [] },
+  "title": "Reliable Notification Platform",
+  "uid": "nplat-overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "time": { "from": "now-15m", "to": "now" },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "API requests /s",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "sum(rate(nplat_api_requests_total[1m]))" }]
+    },
+    {
+      "type": "stat",
+      "title": "Accepted notifications /s",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "targets": [{ "expr": "sum(rate(nplat_notifications_accepted_total[1m]))" }]
+    },
+    {
+      "type": "stat",
+      "title": "Queue depth",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "targets": [{ "expr": "max(nplat_queue_depth)" }]
+    },
+    {
+      "type": "stat",
+      "title": "DLQ size",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "targets": [{ "expr": "max(nplat_dlq_size)" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Worker throughput",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [{ "expr": "sum by (result) (rate(nplat_worker_jobs_total[1m]))" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Delivery outcomes",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "targets": [{ "expr": "sum by (result) (rate(nplat_deliveries_total[1m]))" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Provider latency p95",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "targets": [{ "expr": "histogram_quantile(0.95, sum by (le, provider) (rate(nplat_provider_latency_seconds_bucket[1m])))" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "PostgreSQL / Redis latency p95",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum by (le) (rate(nplat_postgres_latency_seconds_bucket[1m])))", "legendFormat": "postgres" },
+        { "expr": "histogram_quantile(0.95, sum by (le) (rate(nplat_redis_latency_seconds_bucket[1m])))", "legendFormat": "redis" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Retries / webhooks / outbox backlog",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 20 },
+      "targets": [
+        { "expr": "sum(rate(nplat_retries_total[1m]))", "legendFormat": "retries/s" },
+        { "expr": "sum(rate(nplat_webhook_events_total[1m]))", "legendFormat": "webhooks/s" },
+        { "expr": "max(nplat_outbox_backlog)", "legendFormat": "outbox backlog" },
+        { "expr": "max(nplat_queue_pending_entries)", "legendFormat": "PEL" },
+        { "expr": "max(nplat_scheduler_lag_seconds)", "legendFormat": "scheduler lag" }
+      ]
+    }
+  ]
+}

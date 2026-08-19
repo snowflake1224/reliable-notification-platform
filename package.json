@@ -1,0 +1,36 @@
+{
+  "name": "reliable-notification-platform",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Production-shaped asynchronous notification platform: transactional outbox, Redis Streams, workers, retries, and webhooks.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @nplat/shared && npm run build -w @nplat/api && npm run build -w @nplat/worker && npm run build -w @nplat/scheduler && npm run build -w @nplat/provider-simulator",
+    "migrate": "npm run migrate -w @nplat/shared",
+    "seed": "npm run seed -w @nplat/shared",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "dev:api": "npm run dev -w @nplat/api",
+    "dev:worker": "npm run dev -w @nplat/worker",
+    "dev:scheduler": "npm run dev -w @nplat/scheduler",
+    "dev:provider": "npm run dev -w @nplat/provider-simulator",
+    "typecheck": "tsc -b"
+  },
+  "devDependencies": {
+    "@testcontainers/postgresql": "^10.18.0",
+    "@testcontainers/redis": "^10.18.0",
+    "@types/supertest": "^6.0.3",
+    "supertest": "^7.1.0",
+    "testcontainers": "^10.18.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.9"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

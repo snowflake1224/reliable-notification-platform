@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "composite": true,
+    "baseUrl": ".",
+    "paths": {
+      "@nplat/shared": ["../../packages/shared/dist/index.d.ts"]
+    }
+  },
+  "references": [{ "path": "../../packages/shared" }],
+  "include": ["src/**/*.ts"]
+}

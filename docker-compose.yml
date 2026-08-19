@@ -1,0 +1,203 @@
+x-env: &service-env
+  NODE_ENV: production
+  LOG_LEVEL: info
+  DATABASE_URL: postgres://nplat:nplat@postgres:5432/nplat
+  DATABASE_POOL_MAX: "10"
+  REDIS_URL: redis://redis:6379
+  JWT_SECRET: dev-jwt-secret-change-me
+  API_KEY_PEPPER: dev-api-key-pepper-change-me
+  WEBHOOK_SECRET: dev-webhook-secret-change-me
+  PROVIDER_BASE_URL: http://provider-simulator:4000
+  PROVIDER_TIMEOUT_MS: "2000"
+  ALLOW_TEST_FAILURES: "true"
+  API_RATE_LIMIT_PER_SEC: "80"
+  EMAIL_RATE_LIMIT_PER_SEC: "40"
+  SMS_RATE_LIMIT_PER_SEC: "20"
+  PUSH_RATE_LIMIT_PER_SEC: "80"
+  QUEUE_STREAM: nplat:jobs
+  QUEUE_DLQ_STREAM: nplat:jobs:dlq
+  QUEUE_GROUP: workers
+  VISIBILITY_TIMEOUT_MS: "15000"
+  WORKER_CONCURRENCY: "8"
+  MAX_ATTEMPTS: "5"
+  OUTBOX_POLL_MS: "200"
+  SCHEDULER_POLL_MS: "400"
+  MAILHOG_SMTP_HOST: mailhog
+  MAILHOG_SMTP_PORT: "1025"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: nplat
+      POSTGRES_PASSWORD: nplat
+      POSTGRES_DB: nplat
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nplat"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      args:
+        APP: api
+    environment:
+      <<: *service-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["sh", "-c", "node packages/shared/dist/db/migrate.js && node packages/shared/dist/db/seed.js"]
+    restart: "no"
+
+  provider-simulator:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      args:
+        APP: provider-simulator
+    environment:
+      <<: *service-env
+      PORT: "4000"
+      WEBHOOK_TARGET_URL: http://nginx/v1/webhooks
+      DEFAULT_FAILURE_MODE: success
+      FAILURE_RATE: "0"
+    ports:
+      - "4000:4000"
+    depends_on:
+      - nginx
+
+  api-1: &api
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      args:
+        APP: api
+    environment:
+      <<: *service-env
+      SERVICE_NAME: api-1
+      PORT: "3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    expose:
+      - "3000"
+
+  api-2:
+    <<: *api
+    environment:
+      <<: *service-env
+      SERVICE_NAME: api-2
+      PORT: "3000"
+
+  worker-1: &worker
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      args:
+        APP: worker
+    environment:
+      <<: *service-env
+      SERVICE_NAME: worker-1
+      METRICS_PORT: "9091"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      provider-simulator:
+        condition: service_started
+    expose:
+      - "9091"
+
+  worker-2:
+    <<: *worker
+    environment:
+      <<: *service-env
+      SERVICE_NAME: worker-2
+      METRICS_PORT: "9091"
+
+  worker-3:
+    <<: *worker
+    environment:
+      <<: *service-env
+      SERVICE_NAME: worker-3
+      METRICS_PORT: "9091"
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      args:
+        APP: scheduler
+    environment:
+      <<: *service-env
+      SERVICE_NAME: scheduler
+      METRICS_PORT: "9092"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./infra/docker/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api-1
+      - api-2
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - api-1
+      - worker-1
+      - scheduler
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/etc/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+
+volumes:
+  pgdata:
