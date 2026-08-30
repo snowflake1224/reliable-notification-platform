@@ -7,5 +7,6 @@ coverage
 .DS_Store
 .idea
 .vscode
+# Raw k6/bench dumps. The committed snapshot is docs/benchmark-results.md
 load-tests/results
 .tmp

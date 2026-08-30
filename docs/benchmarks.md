@@ -1,6 +1,21 @@
 # Benchmarks
 
-No throughput or latency numbers are claimed in this repository. Run the commands below and record *your* machine’s results.
+Measured numbers from one local Docker Compose run (2026-08-18) are in **[benchmark-results.md](benchmark-results.md)**. They are laptop figures, not production capacity. Re-run the commands below on your machine if you need fresh results.
+
+## Recorded local run (2026-08-18)
+
+| Metric | Value |
+|---|---|
+| Offered / accepted | **25 RPS**, **500/500 HTTP 202** |
+| Accept p50 / p95 | **468 ms / 1.01 s** |
+| Delivery throughput | **13.84 jobs/s** (3 workers) |
+| Queue depth after load | **513** |
+| End-to-end p95 | **1.832 s** |
+| Provider p95 | **151 ms** |
+
+**Conclusion from that run:** delivery lagged accept. Workers/provider were the bottleneck, not Nginx/API accept capacity.
+
+Providers in this repo are **simulated** (optional MailHog for email). Do not claim Twilio, SendGrid, or FCM.
 
 ## Setup
 
@@ -10,7 +25,7 @@ docker compose up --build -d
 curl -s http://localhost:8080/health/ready
 ```
 
-Requires [k6](https://k6.io/).
+Requires [k6](https://k6.io/) for the scripts below. The committed snapshot used `node load-tests/run-bench.mjs` (no k6 install).
 
 ## Scripts
 
@@ -19,8 +34,10 @@ Requires [k6](https://k6.io/).
 | `load-tests/k6/submit.js` | accept path + outbox + workers (all-success provider) |
 | `load-tests/k6/failures.js` | mixed transient failures → retries / DLQ |
 | `load-tests/k6/status.js` | smoke list + readiness |
+| `load-tests/run-bench.mjs` | accept + Prometheus E2E snapshot used for the committed results |
 
 ```bash
+node load-tests/run-bench.mjs
 k6 run load-tests/k6/submit.js
 RATE=40 DURATION=45s k6 run load-tests/k6/submit.js
 k6 run load-tests/k6/failures.js

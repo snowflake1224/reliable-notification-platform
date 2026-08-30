@@ -90,10 +90,11 @@ Compose starts two API instances, three workers, one scheduler, Postgres, Redis,
 - [Observability](docs/observability.md)
 - [Scaling](docs/scaling.md)
 - [Benchmarks](docs/benchmarks.md)
+- [Measured local results](docs/benchmark-results.md)
 - [Testing](docs/testing.md)
 - [Interview questions](docs/interview-questions.md)
 
-Do not quote performance numbers that you have not measured yourself. Instructions for measuring are in `docs/benchmarks.md` and `docs/how-to-measure.md`.
+One local Docker Compose run (2026-08-18) is recorded in `docs/benchmark-results.md` (25 RPS, 500/500 accepted, ~14 deliveries/s, ~1.8 s E2E p95). Those are laptop numbers; do not invent additional figures. Re-run with `node load-tests/run-bench.mjs`.
 
 Quick local numbers (no k6 needed):
 
