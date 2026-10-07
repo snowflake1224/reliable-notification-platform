@@ -164,6 +164,7 @@ services:
       - "8080:80"
     volumes:
       - ./infra/docker/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./demo/notify-demo.html:/usr/share/nginx/html/notify-demo.html:ro
     depends_on:
       - api-1
       - api-2

@@ -1,0 +1,92 @@
+# Public edge only. Postgres, Redis, Prometheus, and Grafana stay off the host.
+# Requires Docker Compose v2.24+ for the !override and !reset tags.
+
+services:
+  postgres:
+    container_name: nplat-postgres
+    ports: !reset []
+    restart: unless-stopped
+
+  redis:
+    ports: !reset []
+    restart: unless-stopped
+
+  migrate:
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
+      API_KEY_PEPPER: ${API_KEY_PEPPER}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+
+  provider-simulator:
+    ports: !reset []
+    restart: unless-stopped
+    environment:
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
+      API_KEY_PEPPER: ${API_KEY_PEPPER}
+
+  api-1:
+    restart: unless-stopped
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
+      API_KEY_PEPPER: ${API_KEY_PEPPER}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
+
+  api-2:
+    restart: unless-stopped
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
+      API_KEY_PEPPER: ${API_KEY_PEPPER}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
+
+  worker-1:
+    restart: unless-stopped
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
+      API_KEY_PEPPER: ${API_KEY_PEPPER}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
+
+  worker-2:
+    profiles: ["full"]
+
+  worker-3:
+    profiles: ["full"]
+
+  scheduler:
+    restart: unless-stopped
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
+      API_KEY_PEPPER: ${API_KEY_PEPPER}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
+
+  nginx:
+    container_name: nplat-edge
+    ports: !reset []
+    restart: unless-stopped
+    networks:
+      default: {}
+      edge:
+        aliases: [nplat-edge]
+
+  prometheus:
+    profiles: ["observe"]
+    ports: !reset []
+
+  grafana:
+    profiles: ["observe"]
+    ports: !reset []
+
+  mailhog:
+    image: axllent/mailpit:v1.21.0
+    container_name: nplat-mail
+    ports: !reset []
+    restart: unless-stopped
+    networks:
+      default: {}
+      edge:
+        aliases: [nplat-mail]
+
+networks:
+  edge:
+    external: true
+    name: portfolio-edge

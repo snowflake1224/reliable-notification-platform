@@ -3,6 +3,7 @@ dist
 *.tsbuildinfo
 coverage
 .env
+.env.production
 *.log
 .DS_Store
 .idea
@@ -10,3 +11,5 @@ coverage
 # Raw k6/bench dumps. The committed snapshot is docs/benchmark-results.md
 load-tests/results
 .tmp
+
+project-description
