@@ -33,7 +33,7 @@ services:
       POSTGRES_PASSWORD: nplat
       POSTGRES_DB: nplat
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -45,7 +45,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "6380:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 2s
@@ -190,7 +190,7 @@ services:
       context: .
       dockerfile: infra/docker/nginx.Dockerfile
     ports:
-      - "8080:80"
+      - "8090:80"
     depends_on:
       api-1:
         condition: service_healthy
@@ -200,7 +200,7 @@ services:
   prometheus:
     image: prom/prometheus:v2.55.1
     ports:
-      - "9090:9090"
+      - "9093:9090"
     volumes:
       - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     depends_on:
@@ -211,7 +211,7 @@ services:
   grafana:
     image: grafana/grafana:11.3.0
     ports:
-      - "3001:3000"
+      - "3011:3000"
     environment:
       GF_SECURITY_ADMIN_PASSWORD: admin
       GF_AUTH_ANONYMOUS_ENABLED: "true"

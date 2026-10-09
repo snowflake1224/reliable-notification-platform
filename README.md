@@ -26,11 +26,11 @@ docker compose up --build
 
 | Service | URL |
 |---|---|
-| Console | http://localhost:8080 |
-| API (same host) | http://localhost:8080/v1 |
+| Console | http://localhost:8090 |
+| API (same host) | http://localhost:8090/v1 |
 | Mailpit inbox | http://localhost:8025 (also inside the console) |
-| Grafana | http://localhost:3001 (admin / admin) |
-| Prometheus | http://localhost:9090 |
+| Grafana | http://localhost:3011 (admin / admin) |
+| Prometheus | http://localhost:9093 |
 | Provider simulator | http://localhost:4000 |
 
 Open the console and walk the pipeline. Each stage lights up only when that Postgres or Redis record exists.
@@ -48,7 +48,7 @@ Local demo credentials (seeded, not for production):
 - Admin: `admin@nplat.local` / `admin-dev-password`
 
 ```bash
-curl -s http://localhost:8080/v1/notifications \
+curl -s http://localhost:8090/v1/notifications \
   -H "x-api-key: nplat_live_dev_demo_key_do_not_use_in_prod" \
   -H "idempotency-key: demo-1" \
   -H "content-type: application/json" \

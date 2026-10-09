@@ -3,9 +3,26 @@ import { generateApiKey, hashApiKey, hashPassword } from "../crypto.js";
 
 const DEMO_KEY = "nplat_live_dev_demo_key_do_not_use_in_prod";
 
+async function openClient(databaseUrl: string): Promise<pg.Client> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 10; attempt++) {
+    const client = new pg.Client({ connectionString: databaseUrl });
+    try {
+      await client.connect();
+      return client;
+    } catch (err) {
+      lastError = err;
+      client.on("error", () => undefined);
+      await client.end().catch(() => undefined);
+      await new Promise((resolve) => setTimeout(resolve, 400 * attempt));
+    }
+  }
+  throw lastError;
+}
+
 export async function seed(databaseUrl: string, pepper: string): Promise<void> {
-  const client = new pg.Client({ connectionString: databaseUrl });
-  await client.connect();
+  const client = await openClient(databaseUrl);
+  client.on("error", () => undefined);
   try {
     const adminHash = await hashPassword(process.env.ADMIN_PASSWORD ?? "admin-dev-password");
     await client.query(
@@ -103,7 +120,7 @@ export async function seed(databaseUrl: string, pepper: string): Promise<void> {
     console.log(`demo tenant API key: ${DEMO_KEY}`);
     void generateApiKey;
   } finally {
-    await client.end();
+    await client.end().catch(() => undefined);
   }
 }
 

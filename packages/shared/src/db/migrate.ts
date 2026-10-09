@@ -5,9 +5,26 @@ import pg from "pg";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+async function openClient(databaseUrl: string): Promise<pg.Client> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 10; attempt++) {
+    const client = new pg.Client({ connectionString: databaseUrl });
+    try {
+      await client.connect();
+      return client;
+    } catch (err) {
+      lastError = err;
+      client.on("error", () => undefined);
+      await client.end().catch(() => undefined);
+      await new Promise((resolve) => setTimeout(resolve, 400 * attempt));
+    }
+  }
+  throw lastError;
+}
+
 export async function runMigrations(databaseUrl: string): Promise<void> {
-  const client = new pg.Client({ connectionString: databaseUrl });
-  await client.connect();
+  const client = await openClient(databaseUrl);
+  client.on("error", () => undefined);
   try {
     await client.query(`
       CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -37,7 +54,7 @@ export async function runMigrations(databaseUrl: string): Promise<void> {
       }
     }
   } finally {
-    await client.end();
+    await client.end().catch(() => undefined);
   }
 }
 
