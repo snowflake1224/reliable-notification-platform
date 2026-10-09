@@ -15,7 +15,7 @@ Measured numbers from one local Docker Compose run (2026-08-18) are in **[benchm
 
 **Conclusion from that run:** delivery lagged accept. Workers/provider were the bottleneck, not Nginx/API accept capacity.
 
-Providers in this repo are **simulated** (optional MailHog for email). Do not claim Twilio, SendGrid, or FCM.
+Providers in this repo are **simulated** (optional Mailpit for email). Do not claim Twilio, SendGrid, or FCM.
 
 ## Setup
 

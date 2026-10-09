@@ -18,6 +18,7 @@
     "dev:worker": "npm run dev -w @nplat/worker",
     "dev:scheduler": "npm run dev -w @nplat/scheduler",
     "dev:provider": "npm run dev -w @nplat/provider-simulator",
+    "dev:web": "npm run dev -w @nplat/web",
     "typecheck": "tsc -b"
   },
   "devDependencies": {

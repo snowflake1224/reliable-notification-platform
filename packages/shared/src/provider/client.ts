@@ -35,14 +35,15 @@ export async function sendToProvider(config: AppConfig, req: SendRequest): Promi
     };
 
     if (res.status === 429) {
-      return { kind: "rate_limited", retryAfterMs: data.retryAfterMs ?? 1000, latencyMs };
+      return { kind: "rate_limited", retryAfterMs: capRetryAfter(data.retryAfterMs) ?? 1000, latencyMs };
     }
     if (res.status >= 500 || res.status === 408) {
       return {
         kind: "transient",
         code: data.code ?? `http_${res.status}`,
         message: data.message ?? "provider transient error",
-        latencyMs
+        latencyMs,
+        retryAfterMs: capRetryAfter(data.retryAfterMs)
       };
     }
     if (!res.ok) {
@@ -71,4 +72,9 @@ export async function sendToProvider(config: AppConfig, req: SendRequest): Promi
   } finally {
     clearTimeout(timer);
   }
+}
+
+function capRetryAfter(ms: number | undefined): number | undefined {
+  if (ms == null || !Number.isFinite(ms) || ms <= 0) return undefined;
+  return Math.min(Math.floor(ms), 120_000);
 }

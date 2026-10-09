@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { CHANNELS, NotFoundError, ValidationError } from "@nplat/shared";
+import { CHANNELS, NotFoundError } from "@nplat/shared";
 import { z } from "zod";
 
 export const catalogRoutes = Router();
@@ -69,6 +69,23 @@ catalogRoutes.post("/templates", async (req, res, next) => {
   }
 });
 
+catalogRoutes.get("/templates", async (req, res, next) => {
+  try {
+    const { rows } = await req.deps.pool.query(
+      `SELECT nt.key AS type, t.channel, tv.subject, tv.body, tv.version
+       FROM templates t
+       JOIN notification_types nt ON nt.id = t.notification_type_id
+       JOIN template_versions tv ON tv.template_id = t.id AND tv.status = 'published'
+       WHERE t.tenant_id = $1
+       ORDER BY nt.key, t.channel`,
+      [req.tenant!.tenantId]
+    );
+    res.json({ templates: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
 catalogRoutes.get("/types", async (req, res, next) => {
   try {
     const { rows } = await req.deps.pool.query(
@@ -80,5 +97,3 @@ catalogRoutes.get("/types", async (req, res, next) => {
     next(err);
   }
 });
-
-void ValidationError;

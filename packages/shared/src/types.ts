@@ -24,7 +24,7 @@ export type FailureMode = "success" | "transient" | "permanent" | "timeout" | "r
 
 export type ProviderResult =
   | { kind: "success"; providerMessageId: string; latencyMs: number }
-  | { kind: "transient"; code: string; message: string; latencyMs: number }
+  | { kind: "transient"; code: string; message: string; latencyMs: number; retryAfterMs?: number }
   | { kind: "permanent"; code: string; message: string; latencyMs: number }
   | { kind: "timeout"; latencyMs: number }
   | { kind: "rate_limited"; retryAfterMs: number; latencyMs: number };

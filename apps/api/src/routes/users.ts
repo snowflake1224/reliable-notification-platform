@@ -50,6 +50,27 @@ userRoutes.get("/:externalId", async (req, res, next) => {
   }
 });
 
+userRoutes.get("/:externalId/preferences", async (req, res, next) => {
+  try {
+    const user = await req.deps.pool.query(
+      `SELECT id FROM users WHERE tenant_id = $1 AND external_id = $2`,
+      [req.tenant!.tenantId, req.params.externalId]
+    );
+    if (!user.rowCount) throw new NotFoundError("user not found");
+    const { rows } = await req.deps.pool.query(
+      `SELECT nt.key AS type, up.channel, up.opted_in
+       FROM user_preferences up
+       JOIN notification_types nt ON nt.id = up.notification_type_id
+       WHERE up.tenant_id = $1 AND up.user_id = $2
+       ORDER BY nt.key, up.channel`,
+      [req.tenant!.tenantId, user.rows[0].id]
+    );
+    res.json({ preferences: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
 userRoutes.put("/:externalId/preferences", async (req, res, next) => {
   try {
     const body = prefSchema.parse(req.body);

@@ -22,16 +22,16 @@ webhookRoutes.post("/:provider", async (req, res, next) => {
     const signature = req.header("x-provider-signature");
     const raw = req.rawBody ?? JSON.stringify(req.body);
     if (!timestamp || !signature) throw new UnauthorizedError("missing webhook signature");
-    const ageMs = Math.abs(Date.now() - Number(timestamp) * (timestamp.length <= 10 ? 1000 : 1));
-    const ts = timestamp.length <= 10 ? timestamp : String(Math.floor(Number(timestamp) / 1000));
-    if (ageMs > 5 * 60 * 1000 && Date.now() - Number(timestamp) > 5 * 60 * 1000) {
-      // allow ms or s timestamps; reject only clearly stale
+    const rawTs = Number(timestamp);
+    if (!Number.isFinite(rawTs)) throw new UnauthorizedError("invalid webhook timestamp");
+    const tsMs = timestamp.length <= 10 ? rawTs * 1000 : rawTs;
+    if (Math.abs(Date.now() - tsMs) > 5 * 60 * 1000) {
+      throw new UnauthorizedError("stale webhook timestamp");
     }
     if (!verifyWebhookSignature(req.deps.config.webhookSecret, timestamp, raw, signature)) {
       req.deps.metrics.webhookEvents.inc({ provider: req.params.provider, result: "invalid_signature" });
       throw new UnauthorizedError("invalid webhook signature");
     }
-    void ts;
 
     const event = eventSchema.parse(req.body);
     const inserted = await req.deps.pool.query(
@@ -44,6 +44,19 @@ webhookRoutes.post("/:provider", async (req, res, next) => {
 
     if (!inserted.rowCount) {
       req.deps.metrics.webhookEvents.inc({ provider: event.provider, result: "duplicate" });
+      const existing = await req.deps.pool.query(
+        `SELECT tenant_id FROM notifications WHERE id = $1`,
+        [event.notificationId]
+      );
+      if (existing.rowCount) {
+        await insertAudit(req.deps.pool, {
+          tenantId: existing.rows[0].tenant_id,
+          notificationId: event.notificationId,
+          actor: "webhook",
+          action: "webhook_duplicate",
+          metadata: { eventId: event.eventId, provider: event.provider }
+        });
+      }
       req.log.info(
         { notificationId: event.notificationId, providerId: event.provider },
         "duplicate webhook ignored"

@@ -20,7 +20,7 @@ export class OutboxDispatcher {
     private readonly metrics: Metrics,
     private readonly dispatcherId: string
   ) {}
-~
+
   start(): void {
     this.stopped = false;
     const loop = async () => {

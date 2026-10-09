@@ -26,11 +26,21 @@ docker compose up --build
 
 | Service | URL |
 |---|---|
-| API (via Nginx) | http://localhost:8080 |
+| Console | http://localhost:8080 |
+| API (same host) | http://localhost:8080/v1 |
+| Mailpit inbox | http://localhost:8025 (also inside the console) |
 | Grafana | http://localhost:3001 (admin / admin) |
 | Prometheus | http://localhost:9090 |
-| MailHog UI | http://localhost:8025 |
 | Provider simulator | http://localhost:4000 |
+
+Open the console and walk the pipeline. Each stage lights up only when that Postgres or Redis record exists.
+
+1. **Deliver now.** Accept returns 202. The trace moves through outbox, worker, provider, and the signed webhook. The rendered email shows in the inbox.
+2. **Hold the receiver, then send.** Type a delay (max 90 seconds). The simulator refuses until then and the worker waits for that time, then the email arrives.
+3. **Bad address.** The row ends `dead` and the dead-letter count increases.
+4. **Replay last webhook.** The same event id returns `duplicate`.
+
+Same idempotency key, opt-out, a scheduled send, and a wrong API key are on the same page. A 202 means accepted, not delivered.
 
 Local demo credentials (seeded, not for production):
 
@@ -51,7 +61,8 @@ curl -s http://localhost:8080/v1/notifications \
 apps/api                 stateless HTTP API + outbox dispatcher
 apps/worker              Redis Streams consumer group
 apps/scheduler           due / retry enqueue (send_at)
-apps/provider-simulator  email / SMS / push + HMAC webhooks + MailHog
+apps/provider-simulator  email / SMS / push + HMAC webhooks + Mailpit
+apps/web                 demo console (static, served by Nginx)
 packages/shared          DB, queue, locks, metrics, state machine
 infra/                   Nginx, Prometheus, Grafana, Docker
 docs/                    architecture and interview notes
@@ -75,7 +86,7 @@ k6 run load-tests/k6/submit.js
 k6 run load-tests/k6/failures.js
 ```
 
-Compose starts two API instances, three workers, one scheduler, Postgres, Redis, Nginx, the provider simulator, Prometheus, Grafana, and MailHog.
+Compose starts two API instances, three workers, one scheduler, Postgres, Redis, Nginx, the provider simulator, Prometheus, Grafana, and Mailpit.
 
 ## Documentation
 

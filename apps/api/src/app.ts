@@ -25,6 +25,10 @@ export function createApp(deps: AppDeps) {
     })
   );
   app.use(requestId);
+  app.use((_req, res, next) => {
+    res.setHeader("x-nplat-instance", deps.config.instanceId);
+    next();
+  });
   app.use(httpMetrics);
 
   app.use("/health", healthRoutes);

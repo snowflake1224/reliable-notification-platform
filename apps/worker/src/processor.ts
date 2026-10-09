@@ -200,7 +200,8 @@ export async function processJob(
       return "ack";
     }
 
-    return scheduleRetry(pool, redis, config, metrics, log, job, current, errorCode);
+    const retryAfterMs = "retryAfterMs" in result ? result.retryAfterMs : undefined;
+    return scheduleRetry(pool, redis, config, metrics, log, job, current, errorCode, retryAfterMs);
   } finally {
     await lock.release();
   }
@@ -214,14 +215,18 @@ async function scheduleRetry(
   log: Logger,
   job: QueueJob,
   current: { channel: string; max_attempts: number; attempt_count: number },
-  reason: string
+  reason: string,
+  retryAfterMs?: number
 ): Promise<"ack"> {
-  const when = nextAttemptAt({
-    baseMs: 500,
-    maxMs: 30_000,
-    attempt: current.attempt_count,
-    jitterRatio: 1
-  });
+  const when =
+    retryAfterMs != null && Number.isFinite(retryAfterMs) && retryAfterMs > 0
+      ? new Date(Date.now() + Math.min(Math.floor(retryAfterMs), 120_000))
+      : nextAttemptAt({
+          baseMs: 500,
+          maxMs: 30_000,
+          attempt: current.attempt_count,
+          jitterRatio: 1
+        });
   await pool.query(
     `UPDATE notifications
      SET status = 'retrying',

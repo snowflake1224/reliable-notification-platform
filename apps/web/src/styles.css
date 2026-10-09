@@ -1,0 +1,209 @@
+:root {
+  color-scheme: dark;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  background: #10140f;
+  color: #e8f0e4;
+  line-height: 1.45;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(900px 420px at 10% -10%, rgba(198, 242, 90, 0.08), transparent 55%),
+    #10140f;
+}
+
+button, input { font: inherit; color: inherit; }
+
+h1, h2, p { margin: 0; }
+
+h1 { font-size: 1.6rem; letter-spacing: -0.03em; }
+
+h2 {
+  margin: 18px 0 8px;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #b7c4ae;
+}
+
+.app { min-height: 100vh; }
+
+.top {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: end;
+  padding: 22px 22px 8px;
+}
+
+.eyebrow {
+  color: #9aa894;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.health {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid #2c3828;
+  font-size: 0.82rem;
+}
+
+.health.ok { color: #d5f5a8; }
+.health.down { color: #f0b4a8; }
+
+.layout {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr) 320px;
+  gap: 14px;
+  padding: 14px;
+  align-items: start;
+}
+
+.side { display: grid; gap: 14px; }
+
+.panel {
+  background: rgba(23, 29, 21, 0.92);
+  border: 1px solid #2a3326;
+  border-radius: 16px;
+  padding: 14px;
+}
+
+.lead { color: #c5d0bf; font-size: 0.92rem; }
+
+.actions, .recent, .mail, .audit { display: grid; gap: 8px; margin-top: 12px; padding: 0; list-style: none; }
+
+button {
+  background: #1d261c;
+  border: 1px solid #354232;
+  border-radius: 10px;
+  padding: 9px 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+button:hover { border-color: #c6f25a; }
+
+button:disabled { opacity: 0.45; cursor: default; }
+
+button.primary {
+  background: #c6f25a;
+  color: #17200c;
+  border-color: transparent;
+  font-weight: 650;
+}
+
+button.active { border-color: #c6f25a; }
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #c5d0bf;
+  font-size: 0.9rem;
+}
+
+input[type="number"] {
+  width: 64px;
+  background: #10140f;
+  border: 1px solid #354232;
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+
+.meta, .muted { color: #9aa894; font-size: 0.82rem; }
+.meta { margin-top: 12px; }
+
+.banner {
+  margin-top: 12px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #24301c;
+  color: #e7f6c8;
+}
+
+.recent button, .mail button {
+  width: 100%;
+  display: grid;
+  gap: 2px;
+}
+
+.trace-head, .stats div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: #243024;
+}
+
+.status-delivered { color: #b6f3a4; }
+.status-retrying, .status-pending, .status-queued, .status-processing { color: #f0d48a; }
+.status-dead { color: #f0b4a8; }
+.status-cancelled { color: #b7c0d4; }
+
+.message {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  background: #10160f;
+  border: 1px solid #2a3326;
+}
+
+.subject { font-weight: 650; margin-bottom: 4px; }
+
+.stages { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 0; }
+
+.stage {
+  display: grid;
+  grid-template-columns: 108px 1fr;
+  gap: 10px;
+  padding: 10px 0 10px 14px;
+  border-left: 2px solid #2a3326;
+  color: #8f9c88;
+}
+
+.stage.done { border-left-color: #c6f25a; color: #e8f0e4; }
+.stage.on { border-left-color: #e2b657; color: #f3e2b2; }
+.stage.bad { border-left-color: #e07a6a; color: #f0b4a8; }
+.stage.skip { border-left-color: #5c6574; color: #aeb6c6; }
+
+.stage-name { color: inherit; font-weight: 650; }
+
+table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid #2a3326; }
+th { color: #9aa894; font-weight: 550; }
+
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0 0; }
+.stats div { display: block; padding: 8px; background: #10160f; border-radius: 10px; }
+dt { color: #9aa894; font-size: 0.75rem; }
+dd { margin: 2px 0 0; font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+
+.mail-body {
+  margin: 10px 0 0;
+  white-space: pre-wrap;
+  background: #10160f;
+  border-radius: 10px;
+  padding: 10px;
+  color: #e8f0e4;
+}
+
+@media (max-width: 1100px) {
+  .layout { grid-template-columns: 1fr; }
+  .top { flex-direction: column; align-items: start; }
+}

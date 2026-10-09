@@ -35,7 +35,7 @@ Worker consumer group
   → XACK   (retries are re-enqueued later, not left to retry-storm the PEL)
 
 Provider simulator
-  → optional MailHog SMTP for email
+  → optional Mailpit SMTP for email
   → HMAC webhook POST /v1/webhooks/:provider
   → webhook_events unique (provider, provider_event_id)
 ```
@@ -71,4 +71,4 @@ There is no extra “queue service.” Redis Streams *are* the queue. Kafka is o
 
 ## What is intentionally not here
 
-Kubernetes, Kafka, multi-region replication, real ESPs/SMS/push vendors, and a product UI. The Compose stack is the reproducible local production shape.
+Kubernetes, Kafka, multi-region replication, real ESPs/SMS/push vendors, and a customer product UI. The console at `/` is a demo surface over this API: it shows rows the system already writes. The Compose stack is the reproducible local production shape.
