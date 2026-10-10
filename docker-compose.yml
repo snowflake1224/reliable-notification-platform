@@ -198,6 +198,10 @@ services:
         condition: service_healthy
       api-2:
         condition: service_healthy
+      provider-simulator:
+        condition: service_started
+      mailhog:
+        condition: service_started
 
   prometheus:
     image: prom/prometheus:v2.55.1
