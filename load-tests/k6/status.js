@@ -6,7 +6,7 @@ export const options = {
   iterations: 1
 };
 
-const BASE = __ENV.BASE_URL || "http://localhost:8080";
+const BASE = __ENV.BASE_URL || "http://localhost:8090";
 const KEY = __ENV.API_KEY || "nplat_live_dev_demo_key_do_not_use_in_prod";
 
 export default function () {

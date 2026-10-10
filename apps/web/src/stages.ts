@@ -100,17 +100,18 @@ export function buildStages(trace: Trace | null, accept: AcceptMeta | null, now 
 
   let hookState: StageState = "wait";
   let hookDetail = "A signed POST comes back with the same event id only once.";
-  if (cancelled || notification?.status === "dead") {
-    hookState = "skip";
-    hookDetail = "No delivery webhook.";
-  } else if (duplicate && webhook) {
+  if (duplicate && webhook) {
     hookState = "done";
     hookDetail = `duplicate · ${webhook.provider_event_id}`;
   } else if (webhook) {
-    hookState = "done";
+    hookState = webhook.event_type === "delivered" ? "done" : "bad";
     hookDetail = `${webhook.event_type} · ${webhook.provider_event_id}`;
-  } else if (notification?.status === "delivered") {
-    hookDetail = "Delivered in Postgres. Waiting for the signed callback.";
+  } else if (notification?.status === "submitted") {
+    hookState = "on";
+    hookDetail = "Provider accepted the message. Waiting for the signed delivery callback.";
+  } else if (cancelled || notification?.status === "dead") {
+    hookState = "skip";
+    hookDetail = "No delivery webhook.";
   }
 
   let scheduleState: StageState = "done";

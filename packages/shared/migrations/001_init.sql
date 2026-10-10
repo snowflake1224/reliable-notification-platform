@@ -102,7 +102,7 @@ CREATE TABLE notifications (
   template_version_id UUID REFERENCES template_versions(id),
   channel TEXT NOT NULL CHECK (channel IN ('email', 'sms', 'push')),
   status TEXT NOT NULL DEFAULT 'pending'
-    CHECK (status IN ('pending', 'queued', 'processing', 'retrying', 'delivered', 'dead', 'cancelled')),
+    CHECK (status IN ('pending', 'queued', 'processing', 'submitted', 'retrying', 'delivered', 'dead', 'cancelled')),
   idempotency_key TEXT,
   payload JSONB NOT NULL DEFAULT '{}'::jsonb,
   rendered_subject TEXT,

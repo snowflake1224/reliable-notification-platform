@@ -66,34 +66,58 @@ webhookRoutes.post("/:provider", async (req, res, next) => {
     }
 
     const notif = await req.deps.pool.query(
-      `SELECT id, tenant_id, status FROM notifications WHERE id = $1`,
+      `SELECT id, tenant_id, status, channel, created_at FROM notifications WHERE id = $1`,
       [event.notificationId]
     );
     if (notif.rowCount) {
+      const current = notif.rows[0];
+      let toStatus: string | undefined;
       if (event.eventType === "delivered" && notif.rows[0].status !== "delivered") {
-        await req.deps.pool.query(
+        const delivered = await req.deps.pool.query(
           `UPDATE notifications
            SET status = 'delivered',
                provider_message_id = COALESCE(provider_message_id, $2),
                version = version + 1,
                updated_at = now()
-           WHERE id = $1 AND status IN ('processing', 'queued', 'retrying', 'pending')`,
+           WHERE id = $1 AND status IN ('processing', 'submitted', 'queued', 'retrying', 'pending')
+           RETURNING id`,
           [event.notificationId, event.providerMessageId]
         );
+        if (delivered.rowCount) {
+          toStatus = "delivered";
+          const created = new Date(current.created_at).getTime();
+          req.deps.metrics.e2eLatency.observe(
+            { channel: current.channel },
+            (Date.now() - created) / 1000
+          );
+          req.deps.metrics.deliveries.inc({ result: "delivered", channel: current.channel });
+        }
       }
       if (event.eventType !== "delivered" && notif.rows[0].status !== "delivered") {
-        await req.deps.pool.query(
+        const failed = await req.deps.pool.query(
           `UPDATE notifications
-           SET last_error_code = $2, last_error_class = 'permanent', updated_at = now()
-           WHERE id = $1 AND status <> 'delivered'`,
+           SET status = 'dead',
+               last_error_code = $2,
+               last_error_class = 'permanent',
+               version = version + 1,
+               updated_at = now()
+           WHERE id = $1
+             AND status IN ('processing', 'submitted', 'queued', 'retrying', 'pending')
+           RETURNING id`,
           [event.notificationId, event.eventType]
         );
+        if (failed.rowCount) {
+          toStatus = "dead";
+          req.deps.metrics.deliveries.inc({ result: "dead", channel: current.channel });
+        }
       }
       await insertAudit(req.deps.pool, {
-        tenantId: notif.rows[0].tenant_id,
+        tenantId: current.tenant_id,
         notificationId: event.notificationId,
         actor: "webhook",
         action: `provider_${event.eventType}`,
+        fromStatus: current.status,
+        toStatus,
         metadata: { eventId: event.eventId, provider: event.provider }
       });
     }

@@ -183,7 +183,7 @@ describe("reliable notification platform", () => {
     const n = await h.pool.query(`SELECT status, attempt_count FROM notifications WHERE id = $1`, [
       accepted.body.id
     ]);
-    expect(n.rows[0].status).toBe("delivered");
+    expect(n.rows[0].status).toBe("submitted");
     expect(n.rows[0].attempt_count).toBe(1);
   });
 
@@ -262,9 +262,9 @@ describe("reliable notification platform", () => {
     expect(n.rows[0].last_error_class).toBe("permanent");
   });
 
-  it("acks duplicate queue delivery after the notification is already delivered", async () => {
-    const delivered = await h.pool.query(
-      `SELECT id FROM notifications WHERE tenant_id = $1 AND status = 'delivered' LIMIT 1`,
+  it("acks duplicate queue delivery after the provider already accepted it", async () => {
+    const submitted = await h.pool.query(
+      `SELECT id FROM notifications WHERE tenant_id = $1 AND status = 'submitted' LIMIT 1`,
       [h.tenantId]
     );
     const result = await processJob(
@@ -276,7 +276,7 @@ describe("reliable notification platform", () => {
       "worker-d",
       {
         outboxEventId: "dup",
-        notificationId: delivered.rows[0].id,
+        notificationId: submitted.rows[0].id,
         tenantId: h.tenantId,
         attempt: 2,
         enqueuedAt: new Date().toISOString()
@@ -287,7 +287,7 @@ describe("reliable notification platform", () => {
 
   it("deduplicates provider webhooks by event id", async () => {
     const n = await h.pool.query(
-      `SELECT id FROM notifications WHERE tenant_id = $1 AND status = 'delivered' LIMIT 1`,
+      `SELECT id FROM notifications WHERE tenant_id = $1 AND status = 'submitted' LIMIT 1`,
       [h.tenantId]
     );
     const payload = {
@@ -316,6 +316,55 @@ describe("reliable notification platform", () => {
       .expect(200);
     expect(first.body.status).toBe("ok");
     expect(second.body.status).toBe("duplicate");
+    const delivered = await h.pool.query(`SELECT status FROM notifications WHERE id = $1`, [n.rows[0].id]);
+    expect(delivered.rows[0].status).toBe("delivered");
+  });
+
+  it("moves a provider-submitted notification to dead on a failure webhook", async () => {
+    const accepted = await request(h.app)
+      .post("/v1/notifications")
+      .set(auth)
+      .set("idempotency-key", "webhook-failed-1")
+      .send({
+        userId: "user-1",
+        type: "order.shipped",
+        channel: "email",
+        payload: { name: "A", orderId: "webhook-failed" }
+      })
+      .expect(202);
+    await h.pool.query(
+      `UPDATE notifications
+       SET status = 'submitted', provider_message_id = 'prov_failed'
+       WHERE id = $1`,
+      [accepted.body.id]
+    );
+    const payload = {
+      eventId: "evt-failed-1",
+      eventType: "bounced",
+      provider: "email",
+      notificationId: accepted.body.id,
+      providerMessageId: "prov_failed"
+    };
+    const body = JSON.stringify(payload);
+    const ts = String(Date.now());
+    const sig = `sha256=${signWebhook(h.config.webhookSecret, ts, body)}`;
+    await request(h.app)
+      .post("/v1/webhooks/email")
+      .set("x-provider-timestamp", ts)
+      .set("x-provider-signature", sig)
+      .set("content-type", "application/json")
+      .send(payload)
+      .expect(200);
+
+    const failed = await h.pool.query(
+      `SELECT status, last_error_code, last_error_class FROM notifications WHERE id = $1`,
+      [accepted.body.id]
+    );
+    expect(failed.rows[0]).toMatchObject({
+      status: "dead",
+      last_error_code: "bounced",
+      last_error_class: "permanent"
+    });
   });
 
   it("does not enqueue future scheduled notifications until they are due", async () => {

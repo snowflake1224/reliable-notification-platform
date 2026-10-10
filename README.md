@@ -1,92 +1,134 @@
 # Reliable Notification Platform
 
-Production-shaped asynchronous notification platform for an SDE-1 / early-SDE-2 backend portfolio.
+A production-shaped, multi-tenant notification backend built to make delivery reliability visible: transactional outbox, Redis Streams, stateless API replicas, idempotent workers, retries, scheduling, dead-letter handling, signed webhooks, and metrics.
 
-The API never delivers a notification in the request path. It writes a notification and an outbox event in one PostgreSQL transaction. A dispatcher publishes to a Redis Stream. A worker consumer group delivers through simulated email / SMS / push providers. Signed webhooks update delivery history. Everything is tenant-isolated, idempotent at the important boundaries, and observable.
+**Live demo placeholder:** `https://YOUR_EC2_DOMAIN/`
+Replace this only after DNS and TLS terminate at the shared edge proxy. The application itself remains deployable with the same Docker Compose overlay.
 
+## Explore
+
+| Page | Local URL | What is there |
+|---|---|---|
+| Home | http://localhost:8090/ | Animated architecture, reliability model, and stack |
+| Console | http://localhost:8090/console/ | Send scenarios; inspect outbox, attempts, retries, audit, webhooks, and inbox |
+| API docs | http://localhost:8090/docs/ | OpenAPI/Swagger contract and authenticated request examples |
+| Inbox | http://localhost:8090/console/inbox/ | Email captured by Mailpit over SMTP; it never sends to real inboxes |
+| Mailpit | http://localhost:8090/mailpit/ | The full Mailpit UI (headers, HTML, raw source), linked from the inbox |
+
+Every page shares one navigation bar and stylesheet (`apps/web/public/site.css`), including the Swagger docs and the proxied Mailpit UI.
+
+![Architecture and home page](docs/assets/home.png)
+
+![Interactive delivery console](docs/assets/console.png)
+
+![Test inbox](docs/assets/inbox.png)
+
+![API docs](docs/assets/docs.png)
+
+## Architecture
+
+```mermaid
+flowchart LR
+  Client --> Nginx
+  Nginx -->|"least connections"| Api1["API instance 1"]
+  Nginx -->|"least connections"| Api2["API instance 2"]
+  Api1 --> Postgres
+  Api2 --> Postgres
+  Postgres --> Outbox["Outbox dispatcher"]
+  Outbox --> Redis["Redis Stream"]
+  Redis --> Workers["Worker consumer group"]
+  Workers --> Provider["Provider simulator"]
+  Provider --> Mailpit["Mailpit test inbox"]
+  Provider -->|"signed HMAC callback"| Nginx
 ```
-Client → Nginx → API → PostgreSQL (notification + outbox)
-                         ↓
-                   Outbox dispatcher
-                         ↓
-                   Redis Stream (consumer group)
-                         ↓
-                   Workers + Redis lock
-                         ↓
-                   Provider simulator → HMAC webhook → API
-```
 
-This is **at-least-once** delivery with **idempotent processing**. It is not exactly-once.
+The two API containers run the **same stateless application** and share Postgres and Redis. A 202 means the notification and outbox event committed. `submitted` means the provider accepted the message. Only a signed provider webhook changes it to `delivered`; bounce/failure webhooks change it to `dead`.
+
+Delivery is **at least once** with idempotency at acceptance, worker locking, provider submission, and webhook ingestion. It does not claim exactly-once delivery.
 
 ## Quick start
 
+Requirements: Docker Desktop/Engine with Compose v2.
+
 ```bash
-docker compose up --build
+docker compose up --build -d
+docker compose ps
 ```
 
-| Service | URL |
-|---|---|
-| Console | http://localhost:8090 |
-| API (same host) | http://localhost:8090/v1 |
-| Mailpit inbox | http://localhost:8025 (also inside the console) |
-| Grafana | http://localhost:3011 (admin / admin) |
-| Prometheus | http://localhost:9093 |
-| Provider simulator | http://localhost:4000 |
-
-Open the console and walk the pipeline. Each stage lights up only when that Postgres or Redis record exists.
-
-1. **Deliver now.** Accept returns 202. The trace moves through outbox, worker, provider, and the signed webhook. The rendered email shows in the inbox.
-2. **Hold the receiver, then send.** Type a delay (max 90 seconds). The simulator refuses until then and the worker waits for that time, then the email arrives.
-3. **Bad address.** The row ends `dead` and the dead-letter count increases.
-4. **Replay last webhook.** The same event id returns `duplicate`.
-
-Same idempotency key, opt-out, a scheduled send, and a wrong API key are on the same page. A 202 means accepted, not delivered.
-
-Local demo credentials (seeded, not for production):
-
-- Tenant API key: `nplat_live_dev_demo_key_do_not_use_in_prod`
-- Admin: `admin@nplat.local` / `admin-dev-password`
+Wait for both APIs to become healthy, then open http://localhost:8090/.
 
 ```bash
-curl -s http://localhost:8090/v1/notifications \
+curl http://localhost:8090/v1/notifications \
   -H "x-api-key: nplat_live_dev_demo_key_do_not_use_in_prod" \
   -H "idempotency-key: demo-1" \
   -H "content-type: application/json" \
   -d '{"userId":"user-1","type":"order.shipped","channel":"email","payload":{"name":"Ada","orderId":"42"}}'
 ```
 
-## Repository layout
+The seeded tenant key is intentionally public and only for synthetic demo data. Local admin credentials are `admin@nplat.local` / `admin-dev-password`; they are not embedded in the browser bundle and are replaced for the deployment overlay.
 
-```
-apps/api                 stateless HTTP API + outbox dispatcher
-apps/worker              Redis Streams consumer group
-apps/scheduler           due / retry enqueue (send_at)
-apps/provider-simulator  email / SMS / push + HMAC webhooks + Mailpit
-apps/web                 demo console (static, served by Nginx)
-packages/shared          DB, queue, locks, metrics, state machine
-infra/                   Nginx, Prometheus, Grafana, Docker
-docs/                    architecture and interview notes
-tests/                   Vitest + Testcontainers
-load-tests/k6            reproducible k6 scripts
-```
+## Demonstrated failure cases
 
-## Why this shape
+- Concurrent workers race on one job, but a Redis lock permits one provider submission.
+- Transient failures are acknowledged and scheduled with full-jitter exponential backoff.
+- Permanent failures and exhausted retries enter `nplat:jobs:dlq`.
+- A repeated idempotency key returns the stored acceptance result.
+- Replayed webhook event IDs return `duplicate` without applying the transition twice.
+- Scheduled notifications get an outbox row only when `send_at` becomes due.
+- Marketing opt-out cancels inside the acceptance transaction.
 
-Synchronous delivery inside `POST /notifications` couples accept latency to provider latency, loses work on API crash, and cannot retry independently. PostgreSQL cannot atomically commit a row and an `XADD`. The outbox is the integration so the database remains the source of truth and publication is retried until it succeeds.
+## Measured result
 
-Redis Streams are used instead of BullMQ so the consumer-group, PEL, ack, and `XCLAIM` semantics are visible in this repo. BullMQ would be a reasonable production wrapper over the same Redis ideas; see [docs/queue-design.md](docs/queue-design.md).
+One recorded local run on 2026-08-18 offered 25 RPS for 20 seconds:
 
-## Commands
+- 500/500 requests returned HTTP 202.
+- Accept latency: p50 468.3ms, p95 1011.6ms, p99 1241.0ms.
+- Worker/delivery throughput after the run: approximately 13.84 jobs/s.
+- Queue depth: 513; PEL: 0; DLQ: 0.
+- End-to-end p95: approximately 1.832s; provider p95: approximately 151ms.
+
+These are laptop observations, not production capacity. See [the complete recorded result](docs/benchmark-results.md) and [measurement instructions](docs/how-to-measure.md).
+
+## Development and CI
 
 ```bash
-npm install
-npm test
+npm ci
 npm run typecheck
-k6 run load-tests/k6/submit.js
-k6 run load-tests/k6/failures.js
+npm run build
+npm run build -w @nplat/web
+npx vitest run tests/unit
+npx vitest run tests/integration
+node load-tests/run-bench.mjs
 ```
 
-Compose starts two API instances, three workers, one scheduler, Postgres, Redis, Nginx, the provider simulator, Prometheus, Grafana, and Mailpit.
+GitHub Actions runs backend typechecking/build, the web build, unit tests, Docker-backed Testcontainers integration tests, and local/production Compose validation.
+
+## Demo deployment
+
+The production overlay keeps Postgres, Redis, Mailpit SMTP, Prometheus, and Grafana off host ports. It requires unique secrets, lowers public limits, disables payload-controlled failures, exposes read-only demo statistics instead of browser admin credentials, and uses the existing external `portfolio-edge` network.
+
+```bash
+cp env.production.example .env
+# Generate every secret; do not leave the example placeholders.
+docker network create portfolio-edge 2>/dev/null || true
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+Follow [the EC2/demo deployment runbook](docs/demo-deployment.md) for DNS/TLS, health checks, reset, rollback, and security-group boundaries.
+
+## Repository layout
+
+```text
+apps/api                 Express API, OpenAPI UI, webhooks, outbox dispatcher
+apps/worker              Redis Streams consumer and provider submission
+apps/scheduler           scheduled sends and retry enqueueing
+apps/provider-simulator  email/SMS/push behavior and signed callbacks
+apps/web                 interactive console served by Nginx
+packages/shared          database, queue, locks, metrics, migrations
+infra                    Nginx, Prometheus, Grafana, Docker
+tests                    Vitest unit tests and Testcontainers integration tests
+load-tests               k6 scripts and measured benchmark runner
+```
 
 ## Documentation
 
@@ -103,12 +145,9 @@ Compose starts two API instances, three workers, one scheduler, Postgres, Redis,
 - [Benchmarks](docs/benchmarks.md)
 - [Measured local results](docs/benchmark-results.md)
 - [Testing](docs/testing.md)
+- [Demo deployment](docs/demo-deployment.md)
 - [Interview questions](docs/interview-questions.md)
 
-One local Docker Compose run (2026-08-18) is recorded in `docs/benchmark-results.md` (25 RPS, 500/500 accepted, ~14 deliveries/s, ~1.8 s E2E p95). Those are laptop numbers; do not invent additional figures. Re-run with `node load-tests/run-bench.mjs`.
+## Scope
 
-Quick local numbers (no k6 needed):
-
-```bash
-node load-tests/run-bench.mjs
-```
+Email, SMS, and push vendors are simulated. Mailpit is a local SMTP catcher, not a real delivery provider. The public deployment must contain only synthetic data and should be periodically reset. A real provider adapter can be added behind environment configuration without changing the outbox/queue design.

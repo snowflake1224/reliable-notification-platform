@@ -10,6 +10,8 @@ x-env: &service-env
   PROVIDER_BASE_URL: http://provider-simulator:4000
   PROVIDER_TIMEOUT_MS: "2000"
   ALLOW_TEST_FAILURES: "true"
+  DEMO_MODE: "true"
+  REQUIRE_SECURE_SECRETS: "false"
   API_RATE_LIMIT_PER_SEC: "80"
   EMAIL_RATE_LIMIT_PER_SEC: "40"
   SMS_RATE_LIMIT_PER_SEC: "20"
@@ -224,6 +226,8 @@ services:
 
   mailhog:
     image: axllent/mailpit:v1.21.0
+    environment:
+      MP_WEBROOT: /mailpit
     ports:
       - "8025:8025"
       - "1025:1025"

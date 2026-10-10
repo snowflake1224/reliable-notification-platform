@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Audit production dependencies
+        run: npm audit --omit=dev
+      - name: Typecheck backend
+        run: npm run typecheck
+      - name: Build backend
+        run: npm run build
+      - name: Build web console
+        run: npm run build -w @nplat/web
+      - name: Unit tests
+        run: npx vitest run tests/unit
+      - name: Validate local Compose
+        run: docker compose -f docker-compose.yml config --quiet
+      - name: Validate production Compose overlay
+        env:
+          JWT_SECRET: ci-jwt-secret-not-for-production
+          API_KEY_PEPPER: ci-api-key-pepper-not-for-production
+          WEBHOOK_SECRET: ci-webhook-secret-not-for-production
+          ADMIN_PASSWORD: ci-admin-password-not-for-production
+        run: docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet
+
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Confirm Docker for Testcontainers
+        run: docker info
+      - name: Integration tests
+        env:
+          CI: "true"
+        run: npx vitest run tests/integration

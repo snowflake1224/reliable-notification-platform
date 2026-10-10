@@ -13,5 +13,4 @@ RUN npm run build -w @nplat/web
 
 FROM nginx:1.27-alpine
 COPY infra/docker/nginx.conf /etc/nginx/nginx.conf
-COPY demo/notify-demo.html /usr/share/nginx/html/notify-demo.html
-COPY --from=web /app/apps/web/dist /usr/share/nginx/html
+COPY --from=web /app/apps/web/dist /usr/share/nginx/html/console

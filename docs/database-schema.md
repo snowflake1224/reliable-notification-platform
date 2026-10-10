@@ -44,15 +44,15 @@ Every tenant-owned table has `tenant_id` with a foreign key to `tenants`. Lookup
 
 ## Conditional updates
 
-Workers never do `SET status = 'delivered'` blindly. They use:
+Workers record provider acceptance with a conditional transition:
 
 ```sql
 UPDATE notifications
-SET status = 'delivered', version = version + 1
+SET status = 'submitted', version = version + 1
 WHERE id = $1 AND tenant_id = $2 AND status = 'processing'
 ```
 
-A stale worker cannot move `delivered` back to `processing`. Version increments on every successful transition.
+A stale worker cannot move `submitted` or a terminal status back to `processing`. A signed provider webhook later transitions `submitted` to `delivered` or `dead`. Version increments on every successful transition.
 
 ## Transactions
 

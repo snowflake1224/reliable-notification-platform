@@ -4,7 +4,7 @@ Logs tell you *what happened*. Metrics tell you *how fast / how much*.
 
 ## 1. Live dashboard (easiest)
 
-1. Open Grafana: http://localhost:3001 (admin / admin)
+1. Open Grafana: http://localhost:3011 (admin / admin)
 2. Open dashboard **Reliable Notification Platform**
 3. Run load (section 3), then watch the panels update every ~5s
 
@@ -21,7 +21,7 @@ Key panels:
 
 ## 2. Prometheus instant queries
 
-Open http://localhost:9090 → Graph, paste:
+Open http://localhost:9093 → Graph, paste:
 
 ```promql
 sum(rate(nplat_api_requests_total[1m]))

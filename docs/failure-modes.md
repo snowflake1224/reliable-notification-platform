@@ -11,7 +11,7 @@ Every row is what the code actually does.
 | API crash before COMMIT | Client error; no row | Safe |
 | Dispatcher crash mid-publish | Stale `publishing` reclaimed after claim timeout | Possible duplicate `XADD`; workers idempotent |
 | Worker crash mid-provider | Message stays in PEL; lock expires | `XCLAIM` + lock + conditional update |
-| Worker crash after DB `delivered`, before `XACK` | Reclaim → worker sees terminal → ack | No second send |
+| Worker crash after DB `submitted`, before `XACK` | Reclaim → worker sees provider-accepted state → ack | No second send |
 | Provider unavailable (transient) | Notification `retrying` | Backoff, scheduler re-enqueues |
 | Provider timeout | Same as transient; provider may have accepted | Provider idempotency key + webhook |
 | Provider permanent error | `dead` + DLQ | Manual replay / fix recipient |

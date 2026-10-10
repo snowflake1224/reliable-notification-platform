@@ -5,13 +5,16 @@ describe("notification state machine", () => {
   it("allows the happy path", () => {
     expect(canTransition("pending", "queued")).toBe(true);
     expect(canTransition("queued", "processing")).toBe(true);
-    expect(canTransition("processing", "delivered")).toBe(true);
+    expect(canTransition("processing", "submitted")).toBe(true);
+    expect(canTransition("submitted", "delivered")).toBe(true);
+    expect(canTransition("processing", "delivered")).toBe(false);
   });
 
   it("allows retry and death", () => {
     expect(canTransition("processing", "retrying")).toBe(true);
     expect(canTransition("retrying", "queued")).toBe(true);
     expect(canTransition("processing", "dead")).toBe(true);
+    expect(canTransition("submitted", "dead")).toBe(true);
   });
 
   it("rejects backward and sideways moves from terminal states", () => {

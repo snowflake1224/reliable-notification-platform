@@ -48,6 +48,7 @@ export async function startHarness(failureMode = "success"): Promise<Harness> {
     rd = await new RedisContainer("redis:7-alpine").start();
   } catch (err) {
     if (isDockerUnavailable(err)) {
+      if (process.env.CI) throw err;
       throw new Error("DOCKER_UNAVAILABLE");
     }
     throw err;

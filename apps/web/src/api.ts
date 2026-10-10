@@ -1,6 +1,4 @@
 export const DEMO_KEY = "nplat_live_dev_demo_key_do_not_use_in_prod";
-export const ADMIN_EMAIL = "admin@nplat.local";
-export const ADMIN_PASSWORD = "admin-dev-password";
 
 export type AcceptBody = {
   id?: string;
@@ -115,6 +113,7 @@ export type MailSummary = {
   Subject: string;
   Created: string;
   Snippet: string;
+  From?: { Name?: string; Address?: string };
   To?: Array<{ Address?: string }>;
 };
 
@@ -179,27 +178,13 @@ export async function putPreference(apiKey: string, optedIn: boolean): Promise<v
   }
 }
 
-export async function loginAdmin(): Promise<string> {
-  const res = await fetch("/admin/login", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD })
-  });
-  const body = (await readJson(res)) as { token?: string; error?: { message?: string } };
-  if (!res.ok || !body.token) throw new Error(body.error?.message ?? "admin login failed");
-  return body.token;
-}
-
-export async function getQueueStats(token: string): Promise<QueueStats | null> {
-  const res = await fetch("/admin/queue/stats", { headers: { authorization: `Bearer ${token}` } });
+export async function getDemoStats(): Promise<{
+  queue: QueueStats;
+  outbox: OutboxStats;
+} | null> {
+  const res = await fetch("/v1/demo/stats");
   if (!res.ok) return null;
-  return (await readJson(res)) as QueueStats;
-}
-
-export async function getOutboxStats(token: string): Promise<OutboxStats | null> {
-  const res = await fetch("/admin/outbox/stats", { headers: { authorization: `Bearer ${token}` } });
-  if (!res.ok) return null;
-  return (await readJson(res)) as OutboxStats;
+  return (await readJson(res)) as { queue: QueueStats; outbox: OutboxStats };
 }
 
 export async function getReady(): Promise<Ready | null> {
@@ -233,11 +218,28 @@ export async function replayWebhook(): Promise<{ status: number; body: { status?
   };
 }
 
-export async function listMail(): Promise<MailSummary[]> {
-  const res = await fetch("/mailpit/api/v1/messages");
+export async function listMail(limit = 8): Promise<MailSummary[]> {
+  const res = await fetch(`/mailpit/api/v1/messages?limit=${limit}`);
   if (!res.ok) return [];
   const body = (await readJson(res)) as { messages?: MailSummary[] };
-  return (body.messages ?? []).slice(0, 8);
+  return (body.messages ?? []).slice(0, limit);
+}
+
+export type MailAddress = { Name?: string; Address?: string };
+
+export type MailDetail = {
+  ID: string;
+  Subject: string;
+  Date: string;
+  From?: MailAddress;
+  To?: MailAddress[];
+  Text: string;
+};
+
+export async function readMailDetail(id: string): Promise<MailDetail | null> {
+  const res = await fetch(`/mailpit/api/v1/message/${id}`);
+  if (!res.ok) return null;
+  return (await readJson(res)) as MailDetail;
 }
 
 export async function readMail(id: string): Promise<string> {

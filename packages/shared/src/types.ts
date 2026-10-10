@@ -5,6 +5,7 @@ export const NOTIFICATION_STATUSES = [
   "pending",
   "queued",
   "processing",
+  "submitted",
   "retrying",
   "delivered",
   "dead",

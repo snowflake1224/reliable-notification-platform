@@ -24,7 +24,14 @@ export async function seed(databaseUrl: string, pepper: string): Promise<void> {
   const client = await openClient(databaseUrl);
   client.on("error", () => undefined);
   try {
-    const adminHash = await hashPassword(process.env.ADMIN_PASSWORD ?? "admin-dev-password");
+    const adminPassword = process.env.ADMIN_PASSWORD ?? "admin-dev-password";
+    if (
+      process.env.REQUIRE_SECURE_SECRETS === "true" &&
+      (adminPassword.length < 16 || /replace-me|change-me|admin-dev|generate-|your-/i.test(adminPassword))
+    ) {
+      throw new Error("ADMIN_PASSWORD must be a unique production value of at least 16 characters");
+    }
+    const adminHash = await hashPassword(adminPassword);
     await client.query(
       `INSERT INTO admin_users (email, password_hash)
        VALUES ($1, $2)
@@ -116,7 +123,9 @@ export async function seed(databaseUrl: string, pepper: string): Promise<void> {
     );
 
     console.log("seed complete");
-    console.log("admin: admin@nplat.local / admin-dev-password");
+    if (process.env.REQUIRE_SECURE_SECRETS !== "true") {
+      console.log("local admin: admin@nplat.local / admin-dev-password");
+    }
     console.log(`demo tenant API key: ${DEMO_KEY}`);
     void generateApiKey;
   } finally {

@@ -22,7 +22,7 @@ Providers in this repo are **simulated** (optional Mailpit for email). Do not cl
 ```bash
 docker compose up --build -d
 # wait until migrate has finished and APIs are ready
-curl -s http://localhost:8080/health/ready
+curl -s http://localhost:8090/health/ready
 ```
 
 Requires [k6](https://k6.io/) for the scripts below. The committed snapshot used `node load-tests/run-bench.mjs` (no k6 install).

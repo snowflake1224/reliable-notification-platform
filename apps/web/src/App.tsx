@@ -1,15 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   DEMO_KEY,
-  getOutboxStats,
+  getDemoStats,
   getPreferences,
-  getQueueStats,
   getReady,
   getSimulate,
   getTrace,
   listMail,
   listNotifications,
-  loginAdmin,
   postNotification,
   putPreference,
   readMail,
@@ -24,6 +22,7 @@ import {
   type SimulateState,
   type Trace
 } from "./api";
+import { SiteHeader } from "./SiteHeader";
 import { buildStages, clock, shortId, type AcceptMeta } from "./stages";
 
 type SendBody = {
@@ -36,8 +35,6 @@ type SendBody = {
 
 export function App() {
   const selectedRef = useRef<string | null>(null);
-  const [adminToken, setAdminToken] = useState<string | null>(null);
-  const [adminError, setAdminError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [trace, setTrace] = useState<Trace | null>(null);
   const [accepts, setAccepts] = useState<Record<string, AcceptMeta>>({});
@@ -63,37 +60,25 @@ export function App() {
   }, []);
 
   const refresh = useCallback(async () => {
-    const [health, sim, inbox, list, preferences] = await Promise.all([
+    const [health, sim, inbox, list, preferences, stats] = await Promise.all([
       getReady(),
       getSimulate(),
       listMail(),
       listNotifications(DEMO_KEY),
-      getPreferences(DEMO_KEY)
+      getPreferences(DEMO_KEY),
+      getDemoStats()
     ]);
     setReady(health);
     setSimulate(sim);
     setMail(inbox);
     setRecent(list);
     setPrefs(preferences);
-    let token = adminToken;
-    if (!token) {
-      try {
-        token = await loginAdmin();
-        setAdminToken(token);
-        setAdminError(null);
-      } catch (err) {
-        setAdminError(err instanceof Error ? err.message : "admin login failed");
-      }
-    }
-    if (token) {
-      const [stats, outbox] = await Promise.all([getQueueStats(token), getOutboxStats(token)]);
-      setQueue(stats);
-      setOutboxStats(outbox);
-    }
+    setQueue(stats?.queue ?? null);
+    setOutboxStats(stats?.outbox ?? null);
     if (selectedRef.current) {
       setTrace(await getTrace(DEMO_KEY, selectedRef.current));
     }
-  }, [adminToken]);
+  }, []);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -157,16 +142,19 @@ export function App() {
 
   return (
     <div className="app">
-      <header className="top">
+      <SiteHeader active="console" />
+      <div className="page-head">
         <div>
-          <p className="eyebrow">Reliable notification platform</p>
+          <p className="kicker">Live pipeline</p>
           <h1>Console</h1>
+          <p>Send demo notifications, break the receiver, and watch each one move from accept to inbox.</p>
         </div>
-        <p className={`health ${ready?.ready ? "ok" : "down"}`}>
-          {ready?.ready ? "Postgres and Redis are up" : ready ? "Not ready" : "Checking health"}
+        <p className={`status-chip ${ready?.ready ? "ok" : ready ? "bad" : "wait"}`}>
+          <span className="dot" />
+          {ready?.ready ? "ready" : ready ? "not ready" : "checking health"}
           {ready ? ` · postgres ${ready.postgres} · redis ${ready.redis}` : ""}
         </p>
-      </header>
+      </div>
 
       <main className="layout">
         <section className="panel controls">
@@ -412,7 +400,6 @@ export function App() {
           <section className="panel">
             <h2>System</h2>
             <p className="meta">Receiver {downLeft > 0 ? `down for ${downLeft}s` : "accepting"}</p>
-            {adminError ? <p className="banner">{adminError}</p> : null}
             <dl className="stats">
               <div><dt>Stream depth</dt><dd>{queue?.depth ?? "—"}</dd></div>
               <div><dt>Pending</dt><dd>{queue?.pending ?? "—"}</dd></div>
@@ -427,6 +414,10 @@ export function App() {
           </section>
           <section className="panel">
             <h2>Inbox</h2>
+            <p className="muted">
+              Mailpit safely captures simulated SMTP email; it does not send messages to real inboxes.{" "}
+              <a href="/console/inbox/">Open the inbox</a>.
+            </p>
             <ul className="mail">
               {mail.length === 0 ? <li className="muted">No mail yet. Email lands here after a successful send.</li> : null}
               {mail.map((message) => (

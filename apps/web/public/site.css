@@ -1,0 +1,202 @@
+/* Shared look for every page: home, console, inbox, API docs, and Mailpit. */
+:root {
+  --bg: #0c1116;
+  --panel: #151c24;
+  --panel-2: #101820;
+  --line: #2a3642;
+  --text: #e7ecf1;
+  --muted: #9aabba;
+  --accent: #8ec8ff;
+  --accent-ink: #0c1116;
+  --amber: #f3d19c;
+  --ok: #8ee0b0;
+  --ok-bg: #143024;
+  --bad: #f0b4b4;
+  --bad-bg: #3a1d1d;
+  --radius: 14px;
+  --font: "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --header-h: 58px;
+}
+
+body.site {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--font);
+  line-height: 1.5;
+  color: var(--text);
+  color-scheme: dark;
+  background:
+    radial-gradient(900px 420px at 10% -10%, rgba(142, 200, 255, 0.12), transparent 60%),
+    radial-gradient(700px 380px at 100% 0%, rgba(243, 209, 156, 0.08), transparent 55%),
+    var(--bg);
+  background-attachment: fixed;
+}
+
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  height: var(--header-h);
+  background: rgba(12, 17, 22, 0.88);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font);
+  box-sizing: border-box;
+}
+
+.site-header *,
+.site-header *::before,
+.site-header *::after { box-sizing: border-box; }
+
+.site-header__inner {
+  max-width: 1280px;
+  height: 100%;
+  margin: 0 auto;
+  padding: 0 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.site-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text) !important;
+  text-decoration: none !important;
+  font-weight: 650;
+  font-size: 0.98rem;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.site-brand__mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, var(--accent), var(--amber));
+  box-shadow: 0 0 14px rgba(142, 200, 255, 0.35);
+}
+
+.site-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  overflow-x: auto;
+}
+
+.site-nav a {
+  color: var(--muted) !important;
+  text-decoration: none !important;
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 9px 12px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.site-nav a:hover { color: var(--text) !important; background: rgba(142, 200, 255, 0.08); }
+
+.site-nav a[aria-current="page"] {
+  color: var(--text) !important;
+  border-color: var(--accent);
+  background: rgba(142, 200, 255, 0.1);
+}
+
+@media (max-width: 640px) {
+  .site-brand__text { display: none; }
+  .site-header__inner { padding: 0 12px; }
+  .site-nav a { padding: 8px 9px; font-size: 0.85rem; }
+}
+
+/* Mailpit at /mailpit/: Nginx injects the header and this class into its page. */
+body.mailpit-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+body.mailpit-shell > #app {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto !important;
+}
+
+[data-bs-theme="dark"] body.mailpit-shell {
+  --bs-body-bg: var(--bg);
+  --bs-body-bg-rgb: 12, 17, 22;
+  --bs-body-color: var(--text);
+  --bs-secondary-bg: var(--panel);
+  --bs-tertiary-bg: var(--panel);
+  --bs-tertiary-bg-rgb: 21, 28, 36;
+  --bs-border-color: var(--line);
+  --bs-secondary-color: var(--muted);
+  --bs-link-color: var(--accent);
+  --bs-link-color-rgb: 142, 200, 255;
+  --bs-link-hover-color: var(--text);
+}
+
+/* Shared page title used by console, inbox, and docs. */
+.page-head {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 26px 22px 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.page-head h1 {
+  margin: 0;
+  font-size: 1.7rem;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.page-head p { margin: 6px 0 0; color: var(--muted); max-width: 70ch; }
+
+.kicker {
+  margin: 0 0 6px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  color: var(--accent);
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  font-size: 0.86rem;
+}
+
+.status-chip.ok { background: var(--ok-bg); color: var(--ok); }
+.status-chip.bad { background: var(--bad-bg); color: var(--bad); }
+.status-chip.wait { background: var(--panel); color: var(--muted); }
+
+.status-chip .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: site-pulse 2.2s ease-out infinite;
+}
+
+@keyframes site-pulse {
+  0% { box-shadow: 0 0 0 0 currentColor; }
+  70% { box-shadow: 0 0 0 8px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-chip .dot { animation: none; }
+}

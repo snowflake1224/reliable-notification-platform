@@ -6,9 +6,9 @@
  *   node --experimental-strip-types load-tests/run-bench.mjs
  *   RATE=30 DURATION_SEC=20 node load-tests/run-bench.mjs
  */
-const BASE = process.env.BASE_URL || "http://localhost:8080";
+const BASE = process.env.BASE_URL || "http://localhost:8090";
 const KEY = process.env.API_KEY || "nplat_live_dev_demo_key_do_not_use_in_prod";
-const PROM = process.env.PROM_URL || "http://localhost:9090";
+const PROM = process.env.PROM_URL || "http://localhost:9093";
 const RATE = Number(process.env.RATE || 25);
 const DURATION_SEC = Number(process.env.DURATION_SEC || 20);
 const CONCURRENCY = Number(process.env.CONCURRENCY || 20);
@@ -143,8 +143,8 @@ async function main() {
   await sleep(15_000);
   printSnapshot(await snapshot("after load (+15s)"));
 
-  console.log("\nGrafana: http://localhost:3001  (admin/admin)");
-  console.log("Prometheus: http://localhost:9090");
+  console.log("\nGrafana: http://localhost:3011  (admin/admin)");
+  console.log("Prometheus: http://localhost:9093");
   console.log("Dashboard: Reliable Notification Platform");
 }
 

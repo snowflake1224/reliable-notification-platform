@@ -22,6 +22,14 @@ const schema = z.object({
     .string()
     .optional()
     .transform((v) => v === "true" || v === "1"),
+  demoMode: z
+    .string()
+    .optional()
+    .transform((v) => v === "true" || v === "1"),
+  requireSecureSecrets: z
+    .string()
+    .optional()
+    .transform((v) => v === "true" || v === "1"),
 
   apiRateLimitPerSec: z.coerce.number().positive().default(50),
   emailRateLimitPerSec: z.coerce.number().positive().default(20),
@@ -66,6 +74,8 @@ export function loadConfig(overrides: Partial<Record<string, string>> = {}): App
     providerBaseUrl: env.PROVIDER_BASE_URL,
     providerTimeoutMs: env.PROVIDER_TIMEOUT_MS,
     allowTestFailures: env.ALLOW_TEST_FAILURES,
+    demoMode: env.DEMO_MODE,
+    requireSecureSecrets: env.REQUIRE_SECURE_SECRETS,
     apiRateLimitPerSec: env.API_RATE_LIMIT_PER_SEC,
     emailRateLimitPerSec: env.EMAIL_RATE_LIMIT_PER_SEC,
     smsRateLimitPerSec: env.SMS_RATE_LIMIT_PER_SEC,
@@ -88,6 +98,18 @@ export function loadConfig(overrides: Partial<Record<string, string>> = {}): App
 
   if (!parsed.instanceId) {
     parsed.instanceId = `${parsed.serviceName}-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+  if (parsed.requireSecureSecrets) {
+    const insecure = [parsed.jwtSecret, parsed.apiKeyPepper, parsed.webhookSecret].some(
+      (value) =>
+        value.length < 24 ||
+        /replace-me|change-me|not-for-production|dev-|generate-|your-/i.test(value)
+    );
+    if (insecure) {
+      throw new Error(
+        "JWT_SECRET, API_KEY_PEPPER, and WEBHOOK_SECRET must be unique production values of at least 24 characters"
+      );
+    }
   }
   return parsed;
 }

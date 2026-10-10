@@ -3,7 +3,8 @@ import type { NotificationStatus } from "./types.js";
 const ALLOWED: Record<NotificationStatus, NotificationStatus[]> = {
   pending: ["queued", "cancelled", "dead"],
   queued: ["processing", "cancelled", "dead"],
-  processing: ["delivered", "retrying", "dead"],
+  processing: ["submitted", "retrying", "dead"],
+  submitted: ["delivered", "dead"],
   retrying: ["queued", "dead", "cancelled"],
   delivered: [],
   dead: [],

@@ -146,34 +146,32 @@ export async function processJob(
         providerMessageId: result.providerMessageId,
         latencyMs: result.latencyMs
       });
-      const delivered = await pool.query(
+      const submitted = await pool.query(
         `UPDATE notifications
-         SET status = 'delivered',
+         SET status = 'submitted',
              provider_message_id = $3,
              last_error_code = NULL,
              last_error_class = NULL,
              version = version + 1,
              updated_at = now()
          WHERE id = $1 AND tenant_id = $2 AND status = 'processing'
-         RETURNING created_at`,
+         RETURNING id`,
         [job.notificationId, job.tenantId, result.providerMessageId]
       );
-      if (delivered.rowCount) {
+      if (submitted.rowCount) {
         await insertAudit(pool, {
           tenantId: job.tenantId,
           notificationId: job.notificationId,
           actor: "worker",
-          action: "delivered",
+          action: "provider_accepted",
           fromStatus: "processing",
-          toStatus: "delivered"
+          toStatus: "submitted"
         });
-        const created = new Date(delivered.rows[0].created_at).getTime();
-        metrics.e2eLatency.observe({ channel: current.channel }, (Date.now() - created) / 1000);
       }
-      metrics.deliveries.inc({ result: "success", channel: current.channel });
-      metrics.workerThroughput.inc({ result: "delivered", channel: current.channel });
+      metrics.deliveries.inc({ result: "submitted", channel: current.channel });
+      metrics.workerThroughput.inc({ result: "submitted", channel: current.channel });
       metrics.processingLatency.observe({ channel: current.channel }, (Date.now() - started) / 1000);
-      log.info({ providerId: current.channel }, "delivered");
+      log.info({ providerId: current.channel }, "provider accepted");
       return "ack";
     }
 
@@ -195,7 +193,17 @@ export async function processJob(
     });
 
     if (permanent || attemptNumber >= current.max_attempts) {
-      await moveToDead(pool, redis, config, metrics, log, job, current, errorCode);
+      await moveToDead(
+        pool,
+        redis,
+        config,
+        metrics,
+        log,
+        job,
+        current,
+        errorCode,
+        permanent ? "permanent" : "transient"
+      );
       metrics.processingLatency.observe({ channel: current.channel }, (Date.now() - started) / 1000);
       return "ack";
     }
@@ -263,17 +271,18 @@ async function moveToDead(
   log: Logger,
   job: QueueJob,
   current: { channel: string },
-  reason: string
+  reason: string,
+  errorClass: "transient" | "permanent"
 ): Promise<void> {
   await pool.query(
     `UPDATE notifications
      SET status = 'dead',
          last_error_code = $3,
-         last_error_class = CASE WHEN $3 = 'timeout' THEN 'transient' ELSE last_error_class END,
+         last_error_class = $4,
          version = version + 1,
          updated_at = now()
      WHERE id = $1 AND tenant_id = $2 AND status IN ('processing', 'retrying')`,
-    [job.notificationId, job.tenantId, reason]
+    [job.notificationId, job.tenantId, reason, errorClass]
   );
   await insertAudit(pool, {
     tenantId: job.tenantId,

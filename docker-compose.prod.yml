@@ -1,6 +1,19 @@
 # Public edge only. Postgres, Redis, Prometheus, and Grafana stay off the host.
 # Requires Docker Compose v2.24+ for the !override and !reset tags.
 
+x-prod-env: &prod-env
+  JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+  API_KEY_PEPPER: ${API_KEY_PEPPER:?set API_KEY_PEPPER in .env}
+  WEBHOOK_SECRET: ${WEBHOOK_SECRET:?set WEBHOOK_SECRET in .env}
+  DEMO_MODE: "true"
+  REQUIRE_SECURE_SECRETS: "true"
+  ALLOW_TEST_FAILURES: "false"
+  API_RATE_LIMIT_PER_SEC: "10"
+  EMAIL_RATE_LIMIT_PER_SEC: "5"
+  SMS_RATE_LIMIT_PER_SEC: "3"
+  PUSH_RATE_LIMIT_PER_SEC: "10"
+  MAX_OUTBOX_BACKLOG: "1000"
+
 services:
   postgres:
     container_name: nplat-postgres
@@ -13,56 +26,51 @@ services:
 
   migrate:
     environment:
-      JWT_SECRET: ${JWT_SECRET}
-      API_KEY_PEPPER: ${API_KEY_PEPPER}
-      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      <<: *prod-env
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
 
   provider-simulator:
     ports: !reset []
     restart: unless-stopped
     environment:
-      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
-      API_KEY_PEPPER: ${API_KEY_PEPPER}
+      <<: *prod-env
 
   api-1:
     restart: unless-stopped
     environment:
-      JWT_SECRET: ${JWT_SECRET}
-      API_KEY_PEPPER: ${API_KEY_PEPPER}
-      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
+      <<: *prod-env
 
   api-2:
     restart: unless-stopped
     environment:
-      JWT_SECRET: ${JWT_SECRET}
-      API_KEY_PEPPER: ${API_KEY_PEPPER}
-      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
+      <<: *prod-env
 
   worker-1:
     restart: unless-stopped
     environment:
-      JWT_SECRET: ${JWT_SECRET}
-      API_KEY_PEPPER: ${API_KEY_PEPPER}
-      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
+      <<: *prod-env
 
   worker-2:
     profiles: ["full"]
+    environment:
+      <<: *prod-env
 
   worker-3:
     profiles: ["full"]
+    environment:
+      <<: *prod-env
 
   scheduler:
     restart: unless-stopped
     environment:
-      JWT_SECRET: ${JWT_SECRET}
-      API_KEY_PEPPER: ${API_KEY_PEPPER}
-      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
+      <<: *prod-env
 
   nginx:
     container_name: nplat-edge
     ports: !reset []
     restart: unless-stopped
+    volumes:
+      - ./infra/docker/nginx.prod.conf:/etc/nginx/nginx.conf:ro
     networks:
       default: {}
       edge:
