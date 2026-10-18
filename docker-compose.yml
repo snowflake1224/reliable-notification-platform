@@ -82,9 +82,9 @@ services:
       FAILURE_RATE: "0"
     ports:
       - "4000:4000"
+    # Webhooks go to http://nginx at send time, not at process start.
+    # Depending on nginx here cycles with nginx's depends_on below.
     depends_on:
-      nginx:
-        condition: service_started
       mailhog:
         condition: service_started
     healthcheck:
