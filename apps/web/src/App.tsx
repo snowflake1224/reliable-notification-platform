@@ -2,21 +2,18 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   DEMO_KEY,
   getDemoStats,
-  getPreferences,
   getReady,
   getSimulate,
   getTrace,
   listMail,
   listNotifications,
   postNotification,
-  putPreference,
   readMail,
   replayWebhook,
   setOutage,
   type ListedNotification,
   type MailSummary,
   type OutboxStats,
-  type Preference,
   type QueueStats,
   type Ready,
   type SimulateState,
@@ -30,7 +27,6 @@ type SendBody = {
   type: string;
   channel: "email";
   payload: Record<string, unknown>;
-  sendAt?: string;
 };
 
 export function App() {
@@ -46,11 +42,9 @@ export function App() {
   const [mail, setMail] = useState<MailSummary[]>([]);
   const [openMailId, setOpenMailId] = useState<string | null>(null);
   const [mailText, setMailText] = useState<string | null>(null);
-  const [prefs, setPrefs] = useState<Preference[]>([]);
   const [banner, setBanner] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [downSeconds, setDownSeconds] = useState(20);
-  const [laterMinutes, setLaterMinutes] = useState(1);
   const [now, setNow] = useState(() => Date.now());
   const [lastRequest, setLastRequest] = useState<{ key: string; body: SendBody } | null>(null);
 
@@ -60,19 +54,17 @@ export function App() {
   }, []);
 
   const refresh = useCallback(async () => {
-    const [health, sim, inbox, list, preferences, stats] = await Promise.all([
+    const [health, sim, inbox, list, stats] = await Promise.all([
       getReady(),
       getSimulate(),
       listMail(),
       listNotifications(DEMO_KEY),
-      getPreferences(DEMO_KEY),
       getDemoStats()
     ]);
     setReady(health);
     setSimulate(sim);
     setMail(inbox);
     setRecent(list);
-    setPrefs(preferences);
     setQueue(stats?.queue ?? null);
     setOutboxStats(stats?.outbox ?? null);
     if (selectedRef.current) {
@@ -135,10 +127,9 @@ export function App() {
 
   const notification = trace?.notification;
   const accept = selectedId ? (accepts[selectedId] ?? null) : null;
-  const stages = buildStages(trace, accept, now);
+  const stages = buildStages(trace, accept);
   const downUntil = simulate?.downUntil ?? null;
   const downLeft = downUntil != null && downUntil > now ? Math.ceil((downUntil - now) / 1000) : 0;
-  const promoOut = prefs.some((pref) => pref.type === "promo.weekly" && pref.channel === "email" && !pref.opted_in);
 
   return (
     <div className="app">
@@ -203,61 +194,6 @@ export function App() {
             >
               Bad address
             </button>
-            <button
-              disabled={busy}
-              onClick={() =>
-                void run(async () => {
-                  await putPreference(DEMO_KEY, false);
-                  await send({
-                    userId: "user-1",
-                    type: "promo.weekly",
-                    channel: "email",
-                    payload: { name: "Ada" }
-                  });
-                })
-              }
-            >
-              Opt out and send promo
-            </button>
-            <button
-              disabled={busy || !promoOut}
-              onClick={() =>
-                void run(async () => {
-                  await putPreference(DEMO_KEY, true);
-                  setBanner("promo.weekly email is opted in again");
-                })
-              }
-            >
-              Opt back in
-            </button>
-            <label className="field">
-              Send in
-              <input
-                type="number"
-                min={1}
-                max={30}
-                value={laterMinutes}
-                onChange={(event) => setLaterMinutes(Number(event.target.value))}
-              />
-              minutes
-            </label>
-            <button
-              disabled={busy}
-              onClick={() =>
-                void run(() => {
-                  const minutes = Math.min(30, Math.max(1, Math.floor(laterMinutes) || 1));
-                  return send({
-                    userId: "user-1",
-                    type: "order.shipped",
-                    channel: "email",
-                    payload: orderPayload(),
-                    sendAt: new Date(Date.now() + minutes * 60_000).toISOString()
-                  });
-                })
-              }
-            >
-              Schedule send
-            </button>
             <button disabled={busy || !lastRequest} onClick={() => void run(() => send(lastRequest!.body, lastRequest!.key))}>
               Same idempotency key
             </button>
@@ -295,7 +231,6 @@ export function App() {
               Wrong API key
             </button>
           </div>
-          <p className="meta">user-1 · promo.weekly email {promoOut ? "opted out" : "opted in"}</p>
           {banner ? <p className="banner">{banner}</p> : null}
           <h2>Recent</h2>
           <ul className="recent">
@@ -404,7 +339,7 @@ export function App() {
               <div><dt>Stream depth</dt><dd>{queue?.depth ?? "—"}</dd></div>
               <div><dt>Pending</dt><dd>{queue?.pending ?? "—"}</dd></div>
               <div><dt>Dead letter</dt><dd>{queue?.dlq ?? "—"}</dd></div>
-              <div><dt>Scheduler due</dt><dd>{queue?.schedulerDue ?? "—"}</dd></div>
+              <div><dt>Retrying</dt><dd>{queue?.retrying ?? "—"}</dd></div>
               <div><dt>Outbox pending</dt><dd>{outboxCount(outboxStats, "pending")}</dd></div>
               <div><dt>Publishing</dt><dd>{outboxCount(outboxStats, "publishing")}</dd></div>
               <div><dt>Published</dt><dd>{outboxCount(outboxStats, "published")}</dd></div>

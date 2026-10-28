@@ -272,8 +272,8 @@ homeRoutes.get("/", async (req, res, next) => {
           <div class="stage"><div class="node"></div><strong>Postgres</strong><span>outbox commit</span></div>
           <div class="stage"><div class="node"></div><strong>Redis</strong><span>stream</span></div>
           <div class="stage"><div class="node"></div><strong>Worker</strong><span>lock and send</span></div>
-          <div class="stage"><div class="node"></div><strong>Provider</strong><span>email, sms, push</span></div>
-          <div class="stage"><div class="node"></div><strong>Webhook</strong><span>HMAC back</span></div>
+          <div class="stage"><div class="node"></div><strong>Provider</strong><span>email simulator</span></div>
+          <div class="stage"><div class="node"></div><strong>Webhook</strong><span>status back</span></div>
         </div>
       </div>
     </section>
@@ -287,7 +287,7 @@ homeRoutes.get("/", async (req, res, next) => {
         </article>
         <article class="fact">
           <h3>The provider is later</h3>
-          <p>Email, SMS, and push are a simulator behind the worker. Captured mail shows up in the console inbox.</p>
+          <p>Email goes through a simulator behind the worker. Captured mail shows up in the console inbox.</p>
         </article>
         <article class="fact">
           <h3>A replay stays one send</h3>
@@ -300,11 +300,11 @@ homeRoutes.get("/", async (req, res, next) => {
       <h2>How a notification moves</h2>
       <div class="steps">
         <article class="card"><div class="num">1</div><div><h3>Edge</h3><p>Nginx receives the call and picks between two instances of the same API service using the fewest open connections. Both are stateless and stamp <code>x-nplat-instance</code>.</p></div></article>
-        <article class="card"><div class="num">2</div><div><h3>Accept</h3><p>The API checks an API key or a JWT, applies a Redis token bucket, and validates the body with Zod. Marketing mail that the user opted out of is cancelled here.</p></div></article>
-        <article class="card"><div class="num">3</div><div><h3>Outbox</h3><p>If <code>send_at</code> is due, the dispatcher claims the row with <code>FOR UPDATE SKIP LOCKED</code> and appends it to the Redis stream <code>nplat:jobs</code>.</p></div></article>
-        <article class="card"><div class="num">4</div><div><h3>Workers</h3><p>The consumer group <code>workers</code> reads the stream. A future <code>send_at</code> waits for the scheduler, which inserts the outbox row when it is time.</p></div></article>
-        <article class="card"><div class="num">5</div><div><h3>Retry</h3><p>A failed attempt is acknowledged, then stored as <code>retrying</code> with full-jitter backoff. The base is 500ms and the cap is 30 seconds. Exhausted jobs land on <code>nplat:jobs:dlq</code>.</p></div></article>
-        <article class="card"><div class="num">6</div><div><h3>Proof</h3><p>The provider calls back through Nginx with an HMAC webhook. The console shows the status, attempts, audit rows, and the message Mailpit captured.</p></div></article>
+        <article class="card"><div class="num">2</div><div><h3>Accept</h3><p>The API checks the API key, validates the body with Zod, and writes the notification, the outbox row, and the idempotency record in one transaction.</p></div></article>
+        <article class="card"><div class="num">3</div><div><h3>Outbox</h3><p>The dispatcher claims pending outbox rows with <code>FOR UPDATE SKIP LOCKED</code> and appends them to the Redis stream <code>nplat:jobs</code>.</p></div></article>
+        <article class="card"><div class="num">4</div><div><h3>Workers</h3><p>The consumer group <code>workers</code> reads the stream. A Redis lock per notification keeps two workers from sending the same email.</p></div></article>
+        <article class="card"><div class="num">5</div><div><h3>Retry</h3><p>A failed attempt is stored as <code>retrying</code> with a <code>next_attempt_at</code>. The scheduler re-enqueues it when that time passes. Exhausted jobs land on <code>nplat:jobs:dlq</code>.</p></div></article>
+        <article class="card"><div class="num">6</div><div><h3>Proof</h3><p>The provider simulator posts a delivery status back through Nginx. The console shows the status, attempts, audit rows, and the message Mailpit captured.</p></div></article>
       </div>
     </section>
 
@@ -326,7 +326,7 @@ homeRoutes.get("/", async (req, res, next) => {
         </div>
         <div class="group card">
           <h3>Auth</h3>
-          <div class="chips"><span class="chip">API keys</span><span class="chip">JWT</span><span class="chip">HMAC webhooks</span></div>
+          <div class="chips"><span class="chip">API keys</span><span class="chip">JWT</span></div>
         </div>
         <div class="group card">
           <h3>Checks</h3>

@@ -8,11 +8,6 @@ x-prod-env: &prod-env
   DEMO_MODE: "true"
   REQUIRE_SECURE_SECRETS: "true"
   ALLOW_TEST_FAILURES: "false"
-  API_RATE_LIMIT_PER_SEC: "10"
-  EMAIL_RATE_LIMIT_PER_SEC: "5"
-  SMS_RATE_LIMIT_PER_SEC: "3"
-  PUSH_RATE_LIMIT_PER_SEC: "10"
-  MAX_OUTBOX_BACKLOG: "1000"
 
 services:
   postgres:

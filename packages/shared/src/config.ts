@@ -31,15 +31,9 @@ const schema = z.object({
     .optional()
     .transform((v) => v === "true" || v === "1"),
 
-  apiRateLimitPerSec: z.coerce.number().positive().default(50),
-  emailRateLimitPerSec: z.coerce.number().positive().default(20),
-  smsRateLimitPerSec: z.coerce.number().positive().default(10),
-  pushRateLimitPerSec: z.coerce.number().positive().default(50),
-
   outboxPollMs: z.coerce.number().int().positive().default(250),
   outboxBatchSize: z.coerce.number().int().positive().default(50),
   outboxClaimTimeoutMs: z.coerce.number().int().positive().default(30_000),
-  maxOutboxBacklog: z.coerce.number().int().positive().default(5000),
 
   queueStream: z.string().default("nplat:jobs"),
   queueDlqStream: z.string().default("nplat:jobs:dlq"),
@@ -76,14 +70,9 @@ export function loadConfig(overrides: Partial<Record<string, string>> = {}): App
     allowTestFailures: env.ALLOW_TEST_FAILURES,
     demoMode: env.DEMO_MODE,
     requireSecureSecrets: env.REQUIRE_SECURE_SECRETS,
-    apiRateLimitPerSec: env.API_RATE_LIMIT_PER_SEC,
-    emailRateLimitPerSec: env.EMAIL_RATE_LIMIT_PER_SEC,
-    smsRateLimitPerSec: env.SMS_RATE_LIMIT_PER_SEC,
-    pushRateLimitPerSec: env.PUSH_RATE_LIMIT_PER_SEC,
     outboxPollMs: env.OUTBOX_POLL_MS,
     outboxBatchSize: env.OUTBOX_BATCH_SIZE,
     outboxClaimTimeoutMs: env.OUTBOX_CLAIM_TIMEOUT_MS,
-    maxOutboxBacklog: env.MAX_OUTBOX_BACKLOG,
     queueStream: env.QUEUE_STREAM,
     queueDlqStream: env.QUEUE_DLQ_STREAM,
     queueGroup: env.QUEUE_GROUP,
@@ -112,10 +101,4 @@ export function loadConfig(overrides: Partial<Record<string, string>> = {}): App
     }
   }
   return parsed;
-}
-
-export function channelRateLimit(config: AppConfig, channel: string): number {
-  if (channel === "email") return config.emailRateLimitPerSec;
-  if (channel === "sms") return config.smsRateLimitPerSec;
-  return config.pushRateLimitPerSec;
 }

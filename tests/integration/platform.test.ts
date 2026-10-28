@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
+  claimDueRetries,
   createLogger,
   createMetrics,
   insertOutbox,
@@ -9,7 +10,6 @@ import {
   pendingOutboxCount,
   publishJob,
   readGroup,
-  signWebhook,
   withTransaction
 } from "../../packages/shared/src/index.js";
 import { processJob } from "../../apps/worker/src/processor.js";
@@ -129,7 +129,7 @@ describe("reliable notification platform", () => {
       .post("/v1/notifications")
       .set(auth)
       .set("idempotency-key", "outbox-1")
-      .send({ userId: "user-1", type: "order.shipped", channel: "sms", payload: { name: "A", orderId: "3" } })
+      .send({ userId: "user-1", type: "order.shipped", channel: "email", payload: { name: "A", orderId: "3" } })
       .expect(202);
 
     const dispatcher = new OutboxDispatcher(
@@ -163,7 +163,7 @@ describe("reliable notification platform", () => {
       .post("/v1/notifications")
       .set(auth)
       .set("idempotency-key", "conc-1")
-      .send({ userId: "user-1", type: "order.shipped", channel: "push", payload: { name: "A", orderId: "4" } })
+      .send({ userId: "user-1", type: "order.shipped", channel: "email", payload: { name: "A", orderId: "4" } })
       .expect(202);
     await h.pool.query(`UPDATE notifications SET status = 'queued' WHERE id = $1`, [accepted.body.id]);
     const job = {
@@ -235,7 +235,7 @@ describe("reliable notification platform", () => {
       .send({
         userId: "user-1",
         type: "order.shipped",
-        channel: "sms",
+        channel: "email",
         payload: { name: "A", orderId: "6", _test: { failureMode: "permanent" } }
       })
       .expect(202);
@@ -297,21 +297,19 @@ describe("reliable notification platform", () => {
       notificationId: n.rows[0].id,
       providerMessageId: "prov_x"
     };
-    const body = JSON.stringify(payload);
-    const ts = String(Date.now());
-    const sig = `sha256=${signWebhook(h.config.webhookSecret, ts, body)}`;
+    await request(h.app)
+      .post("/v1/webhooks/email")
+      .set("x-webhook-secret", "wrong")
+      .send(payload)
+      .expect(401);
     const first = await request(h.app)
       .post("/v1/webhooks/email")
-      .set("x-provider-timestamp", ts)
-      .set("x-provider-signature", sig)
-      .set("content-type", "application/json")
+      .set("x-webhook-secret", h.config.webhookSecret)
       .send(payload)
       .expect(200);
     const second = await request(h.app)
       .post("/v1/webhooks/email")
-      .set("x-provider-timestamp", ts)
-      .set("x-provider-signature", sig)
-      .set("content-type", "application/json")
+      .set("x-webhook-secret", h.config.webhookSecret)
       .send(payload)
       .expect(200);
     expect(first.body.status).toBe("ok");
@@ -345,14 +343,9 @@ describe("reliable notification platform", () => {
       notificationId: accepted.body.id,
       providerMessageId: "prov_failed"
     };
-    const body = JSON.stringify(payload);
-    const ts = String(Date.now());
-    const sig = `sha256=${signWebhook(h.config.webhookSecret, ts, body)}`;
     await request(h.app)
       .post("/v1/webhooks/email")
-      .set("x-provider-timestamp", ts)
-      .set("x-provider-signature", sig)
-      .set("content-type", "application/json")
+      .set("x-webhook-secret", h.config.webhookSecret)
       .send(payload)
       .expect(200);
 
@@ -367,72 +360,35 @@ describe("reliable notification platform", () => {
     });
   });
 
-  it("does not enqueue future scheduled notifications until they are due", async () => {
-    const sendAt = new Date(Date.now() + 60_000).toISOString();
+  it("picks up a retry only after next_attempt_at has passed", async () => {
     const accepted = await request(h.app)
       .post("/v1/notifications")
       .set(auth)
-      .set("idempotency-key", "sched-1")
-      .send({
-        userId: "user-1",
-        type: "order.shipped",
-        channel: "email",
-        payload: { name: "A", orderId: "7" },
-        sendAt
-      })
+      .set("idempotency-key", "retry-due-1")
+      .send({ userId: "user-1", type: "order.shipped", payload: { name: "A", orderId: "7" } })
       .expect(202);
-    expect(accepted.body.scheduled).toBe(true);
-    const outbox = await h.pool.query(`SELECT count(*)::int AS c FROM outbox_events WHERE aggregate_id = $1`, [
-      accepted.body.id
-    ]);
-    expect(outbox.rows[0].c).toBe(0);
-
-    await h.pool.query(`UPDATE notifications SET send_at = now() - interval '1 second' WHERE id = $1`, [
-      accepted.body.id
-    ]);
-    const { claimDueNotifications, insertOutbox: insert } = await import(
-      "../../packages/shared/src/index.js"
+    await h.pool.query(
+      `UPDATE notifications SET status = 'retrying', next_attempt_at = now() + interval '1 minute' WHERE id = $1`,
+      [accepted.body.id]
     );
-    await withTransaction(h.pool, async (client) => {
-      const due = await claimDueNotifications(client, 10, "sched-test");
-      expect(due.some((d) => d.id === accepted.body.id)).toBe(true);
-      await insert(client, {
-        tenantId: h.tenantId,
-        notificationId: accepted.body.id,
-        eventType: "notification.scheduled",
-        payload: {
-          outboxEventId: "",
-          notificationId: accepted.body.id,
-          tenantId: h.tenantId,
-          attempt: 1,
-          enqueuedAt: new Date().toISOString()
-        }
-      });
-    });
-    const after = await h.pool.query(`SELECT count(*)::int AS c FROM outbox_events WHERE aggregate_id = $1`, [
-      accepted.body.id
-    ]);
-    expect(after.rows[0].c).toBe(1);
+    const early = await withTransaction(h.pool, (client) => claimDueRetries(client, 50));
+    expect(early.some((d) => d.id === accepted.body.id)).toBe(false);
+
+    await h.pool.query(
+      `UPDATE notifications SET next_attempt_at = now() - interval '1 second' WHERE id = $1`,
+      [accepted.body.id]
+    );
+    const due = await withTransaction(h.pool, (client) => claimDueRetries(client, 50));
+    expect(due.some((d) => d.id === accepted.body.id)).toBe(true);
   });
 
-  it("cancels marketing sends when the user opted out", async () => {
+  it("only accepts the email channel", async () => {
     await request(h.app)
-      .put("/v1/users/user-1/preferences")
-      .set(auth)
-      .send({ type: "promo.weekly", channel: "email", optedIn: false })
-      .expect(200);
-    const res = await request(h.app)
       .post("/v1/notifications")
       .set(auth)
-      .set("idempotency-key", "pref-1")
-      .send({
-        userId: "user-1",
-        type: "promo.weekly",
-        channel: "email",
-        payload: { name: "A" }
-      })
-      .expect(200);
-    expect(res.body.status).toBe("cancelled");
+      .set("idempotency-key", "sms-1")
+      .send({ userId: "user-1", type: "order.shipped", channel: "sms", payload: { name: "A" } })
+      .expect(400);
   });
 
   it("reads new stream messages via the consumer group", async () => {

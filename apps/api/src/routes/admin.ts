@@ -173,18 +173,15 @@ adminRoutes.get("/queue/stats", requireAdmin, async (req, res, next) => {
       req.deps.config.queueStream,
       req.deps.config.queueGroup
     )) as unknown[];
-    const due = await req.deps.pool.query(
-      `SELECT count(*)::int AS due
-       FROM notifications
-       WHERE (status = 'pending' AND send_at <= now())
-          OR (status = 'retrying' AND next_attempt_at IS NOT NULL AND next_attempt_at <= now())`
+    const retrying = await req.deps.pool.query(
+      `SELECT count(*)::int AS count FROM notifications WHERE status = 'retrying'`
     );
     res.json({
       stream: req.deps.config.queueStream,
       depth,
       dlq,
       pending: Array.isArray(pending) ? pending[0] : 0,
-      schedulerDue: due.rows[0]?.due ?? 0
+      retrying: retrying.rows[0]?.count ?? 0
     });
   } catch (err) {
     next(err);

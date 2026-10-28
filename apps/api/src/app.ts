@@ -4,7 +4,6 @@ import { attachDeps, type AppDeps } from "./context.js";
 import { requireTenant } from "./middleware/auth.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { httpMetrics } from "./middleware/metrics.js";
-import { tenantRateLimit } from "./middleware/rateLimit.js";
 import { requestId } from "./middleware/requestId.js";
 import { adminRoutes } from "./routes/admin.js";
 import { demoRoutes } from "./routes/demo.js";
@@ -22,14 +21,7 @@ export function createApp(deps: AppDeps) {
   app.disable("x-powered-by");
   app.use(attachDeps(deps));
   app.use(requestId);
-  app.use(
-    express.json({
-      limit: "64kb",
-      verify: (req, _res, buf) => {
-        (req as express.Request).rawBody = buf.toString("utf8");
-      }
-    })
-  );
+  app.use(express.json({ limit: "64kb" }));
   app.use((_req, res, next) => {
     res.setHeader("x-nplat-instance", deps.config.instanceId);
     next();
@@ -56,9 +48,9 @@ export function createApp(deps: AppDeps) {
   app.use("/admin", adminRoutes);
   app.use("/v1/demo", demoRoutes);
   app.use("/v1/webhooks", webhookRoutes);
-  app.use("/v1/notifications", requireTenant, tenantRateLimit, notificationRoutes);
-  app.use("/v1/users", requireTenant, tenantRateLimit, userRoutes);
-  app.use("/v1/catalog", requireTenant, tenantRateLimit, catalogRoutes);
+  app.use("/v1/notifications", requireTenant, notificationRoutes);
+  app.use("/v1/users", requireTenant, userRoutes);
+  app.use("/v1/catalog", requireTenant, catalogRoutes);
 
   app.use(errorHandler);
   return app;

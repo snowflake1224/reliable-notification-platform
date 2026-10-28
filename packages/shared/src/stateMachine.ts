@@ -1,14 +1,13 @@
 import type { NotificationStatus } from "./types.js";
 
 const ALLOWED: Record<NotificationStatus, NotificationStatus[]> = {
-  pending: ["queued", "cancelled", "dead"],
-  queued: ["processing", "cancelled", "dead"],
+  pending: ["queued", "dead"],
+  queued: ["processing", "dead"],
   processing: ["submitted", "retrying", "dead"],
   submitted: ["delivered", "dead"],
-  retrying: ["queued", "dead", "cancelled"],
+  retrying: ["queued", "dead"],
   delivered: [],
-  dead: [],
-  cancelled: []
+  dead: []
 };
 
 export function canTransition(from: NotificationStatus, to: NotificationStatus): boolean {
@@ -21,7 +20,7 @@ export function assertTransition(from: NotificationStatus, to: NotificationStatu
   }
 }
 
-export const TERMINAL_STATUSES: NotificationStatus[] = ["delivered", "dead", "cancelled"];
+export const TERMINAL_STATUSES: NotificationStatus[] = ["delivered", "dead"];
 
 export function isTerminal(status: NotificationStatus): boolean {
   return TERMINAL_STATUSES.includes(status);

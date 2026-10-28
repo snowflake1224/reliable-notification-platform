@@ -3,9 +3,7 @@ export const DEMO_KEY = "nplat_live_dev_demo_key_do_not_use_in_prod";
 export type AcceptBody = {
   id?: string;
   status?: string;
-  reason?: string;
   replay?: boolean;
-  sendAt?: string;
   error?: { code?: string; message?: string; requestId?: string };
 };
 
@@ -21,7 +19,6 @@ export type TraceNotification = {
   channel: string;
   attempt_count: number;
   max_attempts: number;
-  send_at: string;
   next_attempt_at: string | null;
   provider_message_id: string | null;
   last_error_code: string | null;
@@ -89,7 +86,6 @@ export type ListedNotification = {
   status: string;
   channel: string;
   attempt_count: number;
-  send_at: string;
   created_at: string;
   type_key: string;
 };
@@ -99,7 +95,7 @@ export type QueueStats = {
   depth: number;
   dlq: number;
   pending: number;
-  schedulerDue: number;
+  retrying: number;
 };
 
 export type OutboxStats = { statuses: Array<{ status: string; count: number }> };
@@ -116,8 +112,6 @@ export type MailSummary = {
   From?: { Name?: string; Address?: string };
   To?: Array<{ Address?: string }>;
 };
-
-export type Preference = { type: string; channel: string; opted_in: boolean };
 
 async function readJson(res: Response): Promise<unknown> {
   const text = await res.text();
@@ -157,25 +151,6 @@ export async function listNotifications(apiKey: string): Promise<ListedNotificat
   if (!res.ok) return [];
   const body = (await readJson(res)) as { notifications?: ListedNotification[] };
   return body.notifications ?? [];
-}
-
-export async function getPreferences(apiKey: string): Promise<Preference[]> {
-  const res = await fetch("/v1/users/user-1/preferences", { headers: { "x-api-key": apiKey } });
-  if (!res.ok) return [];
-  const body = (await readJson(res)) as { preferences?: Preference[] };
-  return body.preferences ?? [];
-}
-
-export async function putPreference(apiKey: string, optedIn: boolean): Promise<void> {
-  const res = await fetch("/v1/users/user-1/preferences", {
-    method: "PUT",
-    headers: { "content-type": "application/json", "x-api-key": apiKey },
-    body: JSON.stringify({ type: "promo.weekly", channel: "email", optedIn })
-  });
-  if (!res.ok) {
-    const body = (await readJson(res)) as AcceptBody;
-    throw new Error(body.error?.message ?? `preference update failed (${res.status})`);
-  }
 }
 
 export async function getDemoStats(): Promise<{

@@ -1,6 +1,5 @@
 global:
   scrape_interval: 5s
-  evaluation_interval: 5s
 
 scrape_configs:
   - job_name: api
@@ -9,9 +8,3 @@ scrape_configs:
   - job_name: worker
     static_configs:
       - targets: ["worker-1:9091", "worker-2:9091", "worker-3:9091"]
-  - job_name: scheduler
-    static_configs:
-      - targets: ["scheduler:9092"]
-  - job_name: provider
-    static_configs:
-      - targets: ["provider-simulator:4000"]

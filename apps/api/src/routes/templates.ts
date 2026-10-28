@@ -9,16 +9,15 @@ catalogRoutes.post("/types", async (req, res, next) => {
     const body = z
       .object({
         key: z.string().min(1),
-        name: z.string().min(1),
-        category: z.enum(["transactional", "marketing"]).default("transactional")
+        name: z.string().min(1)
       })
       .parse(req.body);
     const { rows } = await req.deps.pool.query(
-      `INSERT INTO notification_types (tenant_id, key, name, category)
-       VALUES ($1,$2,$3,$4)
-       ON CONFLICT (tenant_id, key) DO UPDATE SET name = EXCLUDED.name, category = EXCLUDED.category
-       RETURNING id, key, category`,
-      [req.tenant!.tenantId, body.key, body.name, body.category]
+      `INSERT INTO notification_types (tenant_id, key, name)
+       VALUES ($1,$2,$3)
+       ON CONFLICT (tenant_id, key) DO UPDATE SET name = EXCLUDED.name
+       RETURNING id, key`,
+      [req.tenant!.tenantId, body.key, body.name]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -31,7 +30,7 @@ catalogRoutes.post("/templates", async (req, res, next) => {
     const body = z
       .object({
         type: z.string().min(1),
-        channel: z.enum(CHANNELS),
+        channel: z.enum(CHANNELS).default("email"),
         name: z.string().min(1),
         subject: z.string().optional(),
         body: z.string().min(1)
@@ -89,7 +88,7 @@ catalogRoutes.get("/templates", async (req, res, next) => {
 catalogRoutes.get("/types", async (req, res, next) => {
   try {
     const { rows } = await req.deps.pool.query(
-      `SELECT key, name, category FROM notification_types WHERE tenant_id = $1 ORDER BY key`,
+      `SELECT key, name FROM notification_types WHERE tenant_id = $1 ORDER BY key`,
       [req.tenant!.tenantId]
     );
     res.json({ types: rows });

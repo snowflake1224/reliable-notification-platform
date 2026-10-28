@@ -12,10 +12,6 @@ x-env: &service-env
   ALLOW_TEST_FAILURES: "true"
   DEMO_MODE: "true"
   REQUIRE_SECURE_SECRETS: "false"
-  API_RATE_LIMIT_PER_SEC: "80"
-  EMAIL_RATE_LIMIT_PER_SEC: "40"
-  SMS_RATE_LIMIT_PER_SEC: "20"
-  PUSH_RATE_LIMIT_PER_SEC: "80"
   QUEUE_STREAM: nplat:jobs
   QUEUE_DLQ_STREAM: nplat:jobs:dlq
   QUEUE_GROUP: workers
@@ -212,7 +208,6 @@ services:
     depends_on:
       - api-1
       - worker-1
-      - scheduler
 
   grafana:
     image: grafana/grafana:11.3.0

@@ -2,15 +2,12 @@ import type { Redis } from "ioredis";
 import type { Pool } from "pg";
 import {
   acquireLock,
-  channelRateLimit,
-  consumeToken,
   getNotification,
   insertAudit,
   isClaimable,
   isTerminal,
   nextAttemptAt,
   notificationLockName,
-  providerLimitKey,
   publishDlq,
   sendToProvider,
   type AppConfig,
@@ -101,25 +98,7 @@ export async function processJob(
       metadata: { workerId, attemptNumber }
     });
 
-    const limited = await consumeToken(
-      redis,
-      providerLimitKey(current.channel),
-      channelRateLimit(config, current.channel)
-    );
-    if (!limited.allowed) {
-      await finalizeAttempt(pool, {
-        tenantId: job.tenantId,
-        notificationId: job.notificationId,
-        attemptNumber,
-        status: "transient_failed",
-        errorCode: "provider_rate_limited",
-        errorClass: "transient",
-        latencyMs: Date.now() - started
-      });
-      return scheduleRetry(pool, redis, config, metrics, log, job, current, "rate_limited");
-    }
-
-    const recipient = await recipientFor(pool, job.tenantId, current.user_id, current.channel);
+    const recipient = await emailFor(pool, job.tenantId, current.user_id);
     const failureMode = extractTestFailure(current.payload, config.allowTestFailures);
     const result = await sendToProvider(config, {
       tenantId: job.tenantId,
@@ -334,21 +313,12 @@ async function finalizeAttempt(
   );
 }
 
-async function recipientFor(
-  pool: Pool,
-  tenantId: string,
-  userId: string,
-  channel: string
-): Promise<string> {
-  const { rows } = await pool.query(
-    `SELECT email, phone, push_token FROM users WHERE tenant_id = $1 AND id = $2`,
-    [tenantId, userId]
-  );
-  const user = rows[0];
-  if (!user) return "";
-  if (channel === "email") return user.email ?? "";
-  if (channel === "sms") return user.phone ?? "";
-  return user.push_token ?? "";
+async function emailFor(pool: Pool, tenantId: string, userId: string): Promise<string> {
+  const { rows } = await pool.query(`SELECT email FROM users WHERE tenant_id = $1 AND id = $2`, [
+    tenantId,
+    userId
+  ]);
+  return rows[0]?.email ?? "";
 }
 
 function extractTestFailure(payload: unknown, allow?: boolean): FailureMode | undefined {

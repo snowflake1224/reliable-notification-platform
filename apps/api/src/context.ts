@@ -25,7 +25,6 @@ declare global {
       deps: AppDeps;
       tenant?: TenantContext;
       admin?: AdminContext;
-      rawBody?: string;
     }
   }
 }

@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "version": "1.0.0",
-  "description": "Production-shaped asynchronous notification platform: transactional outbox, Redis Streams, workers, retries, and webhooks.",
+  "description": "Email notifications that are stored before they are sent, retried safely, and dead-lettered when they keep failing.",
   "workspaces": [
     "apps/*",
     "packages/*"

@@ -67,58 +67,24 @@ export async function seed(databaseUrl: string, pepper: string): Promise<void> {
     );
     const typeId = type.rows[0].id;
 
-    const marketing = await client.query<{ id: string }>(
-      `INSERT INTO notification_types (tenant_id, key, name, category)
-       VALUES ($1, 'promo.weekly', 'Weekly promo', 'marketing')
-       ON CONFLICT (tenant_id, key) DO UPDATE SET name = EXCLUDED.name
+    const tpl = await client.query<{ id: string }>(
+      `INSERT INTO templates (tenant_id, notification_type_id, channel, name)
+       VALUES ($1, $2, 'email', 'order-shipped-email')
+       ON CONFLICT (tenant_id, notification_type_id, channel) DO UPDATE SET name = EXCLUDED.name
        RETURNING id`,
-      [tenantId]
+      [tenantId, typeId]
+    );
+    await client.query(
+      `INSERT INTO template_versions (tenant_id, template_id, version, subject, body, status)
+       SELECT $1, $2, 1, $3, $4, 'published'
+       WHERE NOT EXISTS (SELECT 1 FROM template_versions WHERE template_id = $2 AND version = 1)`,
+      [tenantId, tpl.rows[0].id, "Your order {{orderId}} shipped", "Hi {{name}}, order {{orderId}} is on the way."]
     );
 
-    for (const channel of ["email", "sms", "push"] as const) {
-      const tpl = await client.query<{ id: string }>(
-        `INSERT INTO templates (tenant_id, notification_type_id, channel, name)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT (tenant_id, notification_type_id, channel) DO UPDATE SET name = EXCLUDED.name
-         RETURNING id`,
-        [tenantId, typeId, channel, `order-shipped-${channel}`]
-      );
-      await client.query(
-        `INSERT INTO template_versions (tenant_id, template_id, version, subject, body, status)
-         SELECT $1, $2, 1, $3, $4, 'published'
-         WHERE NOT EXISTS (SELECT 1 FROM template_versions WHERE template_id = $2 AND version = 1)`,
-        [
-          tenantId,
-          tpl.rows[0].id,
-          channel === "email" ? "Your order {{orderId}} shipped" : null,
-          channel === "email"
-            ? "Hi {{name}}, order {{orderId}} is on the way."
-            : channel === "sms"
-              ? "Order {{orderId}} shipped"
-              : "Order {{orderId}} is on the way"
-        ]
-      );
-
-      const mTpl = await client.query<{ id: string }>(
-        `INSERT INTO templates (tenant_id, notification_type_id, channel, name)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT (tenant_id, notification_type_id, channel) DO UPDATE SET name = EXCLUDED.name
-         RETURNING id`,
-        [tenantId, marketing.rows[0].id, channel, `promo-${channel}`]
-      );
-      await client.query(
-        `INSERT INTO template_versions (tenant_id, template_id, version, subject, body, status)
-         SELECT $1, $2, 1, $3, $4, 'published'
-         WHERE NOT EXISTS (SELECT 1 FROM template_versions WHERE template_id = $2 AND version = 1)`,
-        [tenantId, mTpl.rows[0].id, "This week only", "Hi {{name}}, 20% off this week."]
-      );
-    }
-
     await client.query(
-      `INSERT INTO users (tenant_id, external_id, email, phone, push_token)
-       VALUES ($1, 'user-1', 'buyer@example.test', '+15550001111', 'push-token-demo')
-       ON CONFLICT (tenant_id, external_id) DO UPDATE
-         SET email = EXCLUDED.email, phone = EXCLUDED.phone, push_token = EXCLUDED.push_token`,
+      `INSERT INTO users (tenant_id, external_id, email)
+       VALUES ($1, 'user-1', 'buyer@example.test')
+       ON CONFLICT (tenant_id, external_id) DO UPDATE SET email = EXCLUDED.email`,
       [tenantId]
     );
 

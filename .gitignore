@@ -8,8 +8,8 @@ coverage
 .DS_Store
 .idea
 .vscode
-# Raw k6/bench dumps. The committed snapshot is docs/benchmark-results.md
+# Raw bench dumps
 load-tests/results
 .tmp
 
-project-description
+project-description/

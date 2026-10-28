@@ -1,7 +1,7 @@
 import {
   acquireLock,
   checkReadiness,
-  claimDueNotifications,
+  claimDueRetries,
   createLogger,
   createMetrics,
   createPool,
@@ -29,16 +29,8 @@ async function tick(): Promise<number> {
   if (!lock) return 0;
 
   try {
-    const lag = await pool.query<{ lag: string | null }>(
-      `SELECT EXTRACT(EPOCH FROM (now() - MIN(COALESCE(next_attempt_at, send_at))))::text AS lag
-       FROM notifications
-       WHERE (status = 'pending' AND send_at <= now())
-          OR (status = 'retrying' AND next_attempt_at <= now())`
-    );
-    metrics.schedulerLag.set(Number(lag.rows[0]?.lag ?? 0));
-
     return withTransaction(pool, async (client) => {
-      const due = await claimDueNotifications(client, config.schedulerBatchSize, schedulerId);
+      const due = await claimDueRetries(client, config.schedulerBatchSize);
       let enqueued = 0;
       for (const n of due) {
         const existing = await client.query(
@@ -58,7 +50,7 @@ async function tick(): Promise<number> {
         await insertOutbox(client, {
           tenantId: n.tenant_id,
           notificationId: n.id,
-          eventType: n.status === "retrying" ? "notification.retry" : "notification.scheduled",
+          eventType: "notification.retry",
           payload: job
         });
         await insertAudit(client, {
@@ -82,7 +74,7 @@ async function loop(): Promise<void> {
   while (!stopping) {
     try {
       const n = await tick();
-      if (n) logger.info({ enqueued: n, workerId: schedulerId }, "scheduler enqueued due notifications");
+      if (n) logger.info({ enqueued: n, workerId: schedulerId }, "scheduler enqueued due retries");
     } catch (err) {
       logger.error({ err }, "scheduler tick failed");
     }

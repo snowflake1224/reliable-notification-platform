@@ -1,5 +1,5 @@
 import type { Pool, PoolClient } from "pg";
-import type { Channel, NotificationRow, NotificationStatus, OutboxEventRow, QueueJob } from "../types.js";
+import type { NotificationRow, NotificationStatus, OutboxEventRow, QueueJob } from "../types.js";
 
 type Queryable = Pool | PoolClient;
 
@@ -170,41 +170,14 @@ export async function pendingOutboxCount(db: Queryable): Promise<number> {
   return Number(rows[0]?.count ?? 0);
 }
 
-export async function claimDueNotifications(
-  db: Queryable,
-  batchSize: number,
-  claimedBy: string
-): Promise<NotificationRow[]> {
+export async function claimDueRetries(db: Queryable, batchSize: number): Promise<NotificationRow[]> {
   const { rows } = await db.query<NotificationRow>(
-    `WITH due AS (
-       SELECT id FROM notifications
-       WHERE (
-         (status = 'pending' AND send_at <= now())
-         OR (status = 'retrying' AND next_attempt_at IS NOT NULL AND next_attempt_at <= now())
-       )
-       ORDER BY COALESCE(next_attempt_at, send_at)
-       LIMIT $1
-       FOR UPDATE SKIP LOCKED
-     )
-     SELECT n.* FROM notifications n
-     JOIN due ON due.id = n.id`,
+    `SELECT * FROM notifications
+     WHERE status = 'retrying' AND next_attempt_at IS NOT NULL AND next_attempt_at <= now()
+     ORDER BY next_attempt_at
+     LIMIT $1
+     FOR UPDATE SKIP LOCKED`,
     [batchSize]
   );
-  void claimedBy;
   return rows;
-}
-
-export async function findPreference(
-  db: Queryable,
-  tenantId: string,
-  userId: string,
-  typeId: string,
-  channel: Channel
-): Promise<{ opted_in: boolean } | null> {
-  const { rows } = await db.query<{ opted_in: boolean }>(
-    `SELECT opted_in FROM user_preferences
-     WHERE tenant_id = $1 AND user_id = $2 AND notification_type_id = $3 AND channel = $4`,
-    [tenantId, userId, typeId, channel]
-  );
-  return rows[0] ?? null;
 }

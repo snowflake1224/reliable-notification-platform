@@ -4,14 +4,14 @@ export const openApiDocument = {
     title: "Reliable Notification Platform API",
     version: "1.0.0",
     description:
-      "Production-shaped notification API with a transactional outbox, Redis Streams, idempotent workers, retries, scheduling, and signed provider webhooks. The hosted deployment is a demo: use only synthetic recipients and data."
+      "Email notification API. POST returns 202 once the notification is stored; a worker sends the email later, retries with backoff, and moves exhausted sends to a dead-letter list. Use only synthetic recipients and data."
   },
   servers: [{ url: "/", description: "Current host" }],
   tags: [
     { name: "Notifications", description: "Accept and inspect asynchronous notification delivery." },
-    { name: "Users", description: "Tenant users and channel preferences." },
+    { name: "Users", description: "Tenant users and their email addresses." },
     { name: "Catalog", description: "Notification types and versioned templates." },
-    { name: "Webhooks", description: "Signed callbacks from delivery providers." },
+    { name: "Webhooks", description: "Delivery status callbacks from the provider simulator." },
     { name: "Admin", description: "JWT-protected tenant and operational controls." },
     { name: "Operations", description: "Liveness, readiness, and metrics." }
   ],
@@ -21,7 +21,7 @@ export const openApiDocument = {
         tags: ["Notifications"],
         summary: "Accept a notification",
         description:
-          "Returns 202 after the notification, idempotency record, and due outbox event commit. Provider delivery happens asynchronously.",
+          "Returns 202 after the notification, idempotency record, and outbox event commit. Email delivery happens later on a worker.",
         security: [{ tenantApiKey: [] }],
         parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
         requestBody: {
@@ -35,7 +35,7 @@ export const openApiDocument = {
           },
           "400": { $ref: "#/components/responses/BadRequest" },
           "401": { $ref: "#/components/responses/Unauthorized" },
-          "429": { $ref: "#/components/responses/RateLimited" }
+          "409": { description: "Idempotency key reused with a different body" }
         }
       },
       get: {
@@ -137,29 +137,6 @@ export const openApiDocument = {
         }
       }
     },
-    "/v1/users/{externalId}/preferences": {
-      get: {
-        tags: ["Users"],
-        summary: "List notification preferences",
-        security: [{ tenantApiKey: [] }],
-        parameters: [{ $ref: "#/components/parameters/ExternalUserId" }],
-        responses: { "200": { description: "Preferences" } }
-      },
-      put: {
-        tags: ["Users"],
-        summary: "Set a notification preference",
-        security: [{ tenantApiKey: [] }],
-        parameters: [{ $ref: "#/components/parameters/ExternalUserId" }],
-        requestBody: {
-          required: true,
-          content: { "application/json": { schema: { $ref: "#/components/schemas/Preference" } } }
-        },
-        responses: {
-          "200": { description: "Preference saved" },
-          "404": { $ref: "#/components/responses/NotFound" }
-        }
-      }
-    },
     "/v1/catalog/types": {
       get: {
         tags: ["Catalog"],
@@ -196,21 +173,14 @@ export const openApiDocument = {
         responses: { "201": { description: "Template version published" } }
       }
     },
-    "/v1/webhooks/{provider}": {
+    "/v1/webhooks/email": {
       post: {
         tags: ["Webhooks"],
-        summary: "Process a provider delivery event",
+        summary: "Record a delivery status from the provider simulator",
         description:
-          "The provider signs `timestamp + '.' + rawBody` with HMAC-SHA256. Event IDs are idempotent per provider.",
+          "Marks the notification delivered or dead. A repeated event id is ignored. A real provider would sign this callback.",
         parameters: [
-          {
-            name: "provider",
-            in: "path",
-            required: true,
-            schema: { type: "string", enum: ["email", "sms", "push"] }
-          },
-          { name: "x-provider-timestamp", in: "header", required: true, schema: { type: "string" } },
-          { name: "x-provider-signature", in: "header", required: true, schema: { type: "string" } }
+          { name: "x-webhook-secret", in: "header", required: true, schema: { type: "string" } }
         ],
         requestBody: {
           required: true,
@@ -276,7 +246,7 @@ export const openApiDocument = {
     "/admin/queue/stats": {
       get: {
         tags: ["Admin"],
-        summary: "Read Redis Stream and scheduler counts",
+        summary: "Read Redis Stream and retry counts",
         security: [{ adminJwt: [] }],
         responses: { "200": { description: "Queue statistics" } }
       }
@@ -367,43 +337,39 @@ export const openApiDocument = {
     schemas: {
       CreateNotification: {
         type: "object",
-        required: ["userId", "type", "channel"],
+        required: ["userId", "type"],
         properties: {
           userId: { type: "string", example: "user-1" },
           type: { type: "string", example: "order.shipped" },
-          channel: { type: "string", enum: ["email", "sms", "push"] },
+          channel: { type: "string", enum: ["email"], default: "email" },
           payload: {
             type: "object",
             additionalProperties: true,
             example: { name: "Ada", orderId: "A-1042" }
-          },
-          sendAt: { type: "string", format: "date-time" }
+          }
         }
       },
       AcceptedNotification: {
         type: "object",
-        required: ["id", "status", "sendAt", "scheduled", "replay"],
+        required: ["id", "status", "replay"],
         properties: {
           id: { type: "string", format: "uuid" },
           status: { $ref: "#/components/schemas/NotificationStatus" },
-          sendAt: { type: "string", format: "date-time" },
-          scheduled: { type: "boolean" },
           replay: { type: "boolean" }
         }
       },
       NotificationStatus: {
         type: "string",
-        enum: ["pending", "queued", "processing", "submitted", "retrying", "delivered", "dead", "cancelled"]
+        enum: ["pending", "queued", "processing", "submitted", "retrying", "delivered", "dead"]
       },
       Notification: {
         type: "object",
         properties: {
           id: { type: "string", format: "uuid" },
           status: { $ref: "#/components/schemas/NotificationStatus" },
-          channel: { type: "string", enum: ["email", "sms", "push"] },
+          channel: { type: "string", enum: ["email"] },
           attempt_count: { type: "integer" },
           max_attempts: { type: "integer" },
-          send_at: { type: "string", format: "date-time" },
           next_attempt_at: { type: ["string", "null"], format: "date-time" },
           provider_message_id: { type: ["string", "null"] },
           last_error_code: { type: ["string", "null"] },
@@ -425,18 +391,7 @@ export const openApiDocument = {
         required: ["userId"],
         properties: {
           userId: { type: "string" },
-          email: { type: "string", format: "email" },
-          phone: { type: "string" },
-          pushToken: { type: "string" }
-        }
-      },
-      Preference: {
-        type: "object",
-        required: ["type", "channel", "optedIn"],
-        properties: {
-          type: { type: "string" },
-          channel: { type: "string", enum: ["email", "sms", "push"] },
-          optedIn: { type: "boolean" }
+          email: { type: "string", format: "email" }
         }
       },
       NotificationType: {
@@ -444,16 +399,15 @@ export const openApiDocument = {
         required: ["key", "name"],
         properties: {
           key: { type: "string" },
-          name: { type: "string" },
-          category: { type: "string", enum: ["transactional", "marketing"], default: "transactional" }
+          name: { type: "string" }
         }
       },
       Template: {
         type: "object",
-        required: ["type", "channel", "name", "body"],
+        required: ["type", "name", "body"],
         properties: {
           type: { type: "string" },
-          channel: { type: "string", enum: ["email", "sms", "push"] },
+          channel: { type: "string", enum: ["email"], default: "email" },
           name: { type: "string" },
           subject: { type: "string" },
           body: { type: "string" }
@@ -461,11 +415,11 @@ export const openApiDocument = {
       },
       WebhookEvent: {
         type: "object",
-        required: ["eventId", "eventType", "provider", "notificationId", "providerMessageId"],
+        required: ["eventId", "eventType", "notificationId", "providerMessageId"],
         properties: {
           eventId: { type: "string" },
           eventType: { type: "string", enum: ["delivered", "bounced", "failed"] },
-          provider: { type: "string", enum: ["email", "sms", "push"] },
+          provider: { type: "string", enum: ["email"], default: "email" },
           notificationId: { type: "string", format: "uuid" },
           providerMessageId: { type: "string" }
         }
@@ -495,10 +449,6 @@ export const openApiDocument = {
       },
       NotFound: {
         description: "Resource not found",
-        content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } }
-      },
-      RateLimited: {
-        description: "Rate limit exceeded",
         content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } }
       }
     }

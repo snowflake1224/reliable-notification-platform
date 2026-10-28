@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * Local load + metrics snapshot runner (no k6 required).
+ * Local load + metrics snapshot runner.
  *
  * Usage:
- *   node --experimental-strip-types load-tests/run-bench.mjs
+ *   node load-tests/run-bench.mjs
  *   RATE=30 DURATION_SEC=20 node load-tests/run-bench.mjs
  */
 const BASE = process.env.BASE_URL || "http://localhost:8090";
@@ -79,7 +79,7 @@ async function submitOne(i) {
       body: JSON.stringify({
         userId: "user-1",
         type: "order.shipped",
-        channel: ["email", "sms", "push"][i % 3],
+        channel: "email",
         payload: { name: "Bench", orderId: String(i) }
       })
     });
@@ -143,9 +143,8 @@ async function main() {
   await sleep(15_000);
   printSnapshot(await snapshot("after load (+15s)"));
 
-  console.log("\nGrafana: http://localhost:3011  (admin/admin)");
+  console.log("\nGrafana: http://localhost:3011/d/nplat-overview");
   console.log("Prometheus: http://localhost:9093");
-  console.log("Dashboard: Reliable Notification Platform");
 }
 
 main().catch((err) => {

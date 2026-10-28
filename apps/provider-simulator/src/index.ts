@@ -5,7 +5,6 @@ import {
   createMetrics,
   installShutdown,
   randomId,
-  signWebhook,
   type FailureMode
 } from "@nplat/shared";
 
@@ -26,7 +25,7 @@ app.use(express.json({ limit: "64kb" }));
 type WebhookPayload = {
   eventId: string;
   eventType: "delivered";
-  provider: string;
+  provider: "email";
   notificationId: string;
   providerMessageId: string;
 };
@@ -75,7 +74,7 @@ app.post("/send", async (req, res) => {
     return;
   }
 
-  const channel = String(req.body?.channel ?? "email");
+  const channel = "email";
   const notificationId = String(req.body?.notificationId ?? "");
 
   if (downUntil > Date.now()) {
@@ -113,7 +112,7 @@ app.post("/send", async (req, res) => {
   const providerMessageId = `prov_${randomId()}`;
   if (idem) seenIdempotency.set(idem, { providerMessageId });
 
-  if (channel === "email" && process.env.MAILHOG_SMTP_HOST) {
+  if (process.env.MAILHOG_SMTP_HOST) {
     try {
       const transport = nodemailer.createTransport({
         host: process.env.MAILHOG_SMTP_HOST,
@@ -138,49 +137,37 @@ app.post("/send", async (req, res) => {
   );
   res.json({ providerMessageId });
 
-  void fireWebhook({
-    provider: channel,
-    notificationId,
-    providerMessageId
-  });
+  void fireWebhook(notificationId, providerMessageId);
 });
 
-async function fireWebhook(input: {
-  provider: string;
-  notificationId: string;
-  providerMessageId: string;
-}): Promise<void> {
-  if (!input.notificationId) return;
+async function fireWebhook(notificationId: string, providerMessageId: string): Promise<void> {
+  if (!notificationId) return;
   await sleep(25);
   const payload: WebhookPayload = {
     eventId: `evt_${randomId()}`,
     eventType: "delivered",
-    provider: input.provider,
-    notificationId: input.notificationId,
-    providerMessageId: input.providerMessageId
+    provider: "email",
+    notificationId,
+    providerMessageId
   };
   lastWebhook = payload;
   try {
     await postWebhook(payload);
-    metrics.webhookEvents.inc({ provider: input.provider, result: "sent" });
+    metrics.webhookEvents.inc({ provider: "email", result: "sent" });
   } catch (err) {
-    logger.warn({ err, notificationId: input.notificationId }, "webhook delivery failed");
-    metrics.webhookEvents.inc({ provider: input.provider, result: "failed" });
+    logger.warn({ err, notificationId }, "webhook delivery failed");
+    metrics.webhookEvents.inc({ provider: "email", result: "failed" });
   }
 }
 
 async function postWebhook(payload: WebhookPayload): Promise<{ status: number; body: unknown }> {
-  const body = JSON.stringify(payload);
-  const timestamp = String(Date.now());
-  const signature = `sha256=${signWebhook(webhookSecret, timestamp, body)}`;
-  const response = await fetch(`${webhookTarget}/${payload.provider}`, {
+  const response = await fetch(`${webhookTarget}/email`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      "x-provider-timestamp": timestamp,
-      "x-provider-signature": signature
+      "x-webhook-secret": webhookSecret
     },
-    body
+    body: JSON.stringify(payload)
   });
   const parsed = (await response.json().catch(() => ({}))) as unknown;
   return { status: response.status, body: parsed };

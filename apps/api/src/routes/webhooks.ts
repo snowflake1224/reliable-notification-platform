@@ -1,36 +1,22 @@
 import { Router } from "express";
-import {
-  insertAudit,
-  UnauthorizedError,
-  verifyWebhookSignature
-} from "@nplat/shared";
+import { insertAudit, UnauthorizedError } from "@nplat/shared";
 import { z } from "zod";
 
 const eventSchema = z.object({
   eventId: z.string().min(1),
   eventType: z.enum(["delivered", "bounced", "failed"]),
-  provider: z.enum(["email", "sms", "push"]),
+  provider: z.literal("email").default("email"),
   notificationId: z.string().uuid(),
   providerMessageId: z.string().min(1)
 });
 
 export const webhookRoutes = Router();
 
-webhookRoutes.post("/:provider", async (req, res, next) => {
+webhookRoutes.post("/email", async (req, res, next) => {
   try {
-    const timestamp = req.header("x-provider-timestamp");
-    const signature = req.header("x-provider-signature");
-    const raw = req.rawBody ?? JSON.stringify(req.body);
-    if (!timestamp || !signature) throw new UnauthorizedError("missing webhook signature");
-    const rawTs = Number(timestamp);
-    if (!Number.isFinite(rawTs)) throw new UnauthorizedError("invalid webhook timestamp");
-    const tsMs = timestamp.length <= 10 ? rawTs * 1000 : rawTs;
-    if (Math.abs(Date.now() - tsMs) > 5 * 60 * 1000) {
-      throw new UnauthorizedError("stale webhook timestamp");
-    }
-    if (!verifyWebhookSignature(req.deps.config.webhookSecret, timestamp, raw, signature)) {
-      req.deps.metrics.webhookEvents.inc({ provider: req.params.provider, result: "invalid_signature" });
-      throw new UnauthorizedError("invalid webhook signature");
+    // A real provider would sign the callback; the local simulator only sends a shared secret.
+    if (req.header("x-webhook-secret") !== req.deps.config.webhookSecret) {
+      throw new UnauthorizedError("unknown webhook sender");
     }
 
     const event = eventSchema.parse(req.body);

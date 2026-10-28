@@ -110,12 +110,6 @@ export function createMetrics(service: string) {
     registers: [register]
   });
 
-  const schedulerLag = new Gauge({
-    name: "nplat_scheduler_lag_seconds",
-    help: "Age of the oldest due notification not yet enqueued",
-    registers: [register]
-  });
-
   const e2eLatency = new Histogram({
     name: "nplat_e2e_latency_seconds",
     help: "Accept-to-delivered latency",
@@ -141,7 +135,6 @@ export function createMetrics(service: string) {
     webhookEvents,
     postgresLatency,
     redisLatency,
-    schedulerLag,
     e2eLatency
   };
 }

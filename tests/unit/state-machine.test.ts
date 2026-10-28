@@ -20,7 +20,6 @@ describe("notification state machine", () => {
   it("rejects backward and sideways moves from terminal states", () => {
     expect(canTransition("delivered", "processing")).toBe(false);
     expect(canTransition("dead", "queued")).toBe(false);
-    expect(canTransition("cancelled", "pending")).toBe(false);
     expect(isTerminal("delivered")).toBe(true);
     expect(isClaimable("delivered")).toBe(false);
     expect(isClaimable("queued")).toBe(true);

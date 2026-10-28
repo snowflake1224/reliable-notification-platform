@@ -1,74 +1,46 @@
-# Architecture
+# Accept, store, work, retry
 
-## Request path
+## Accept and store
 
-```
-Client
-  → Nginx (least_conn across api-1, api-2)
-    → API instance (stateless)
-      → BEGIN
-         INSERT notifications (pending)
-         INSERT outbox_events (pending)     # immediate sends only
-         INSERT idempotency_records
-      → COMMIT
-      → 202 Accepted
-```
+`POST /v1/notifications` does one Postgres transaction:
 
-The HTTP handler never calls a provider. That is the whole point: accept latency stays a database write, providers can fail independently, and workers scale separately from the API.
+1. insert the notification (`pending`),
+2. insert an outbox row (the intent to send),
+3. insert the idempotency record (key + the response we returned).
 
-## Async path
+Only after that commits does the API return 202. The request never talks to the email provider. If the process dies right after the 202, the outbox row is still there and will be picked up.
 
-```
-Outbox dispatcher (runs in each API process)
-  → SELECT … FOR UPDATE SKIP LOCKED
-  → status = publishing
-  → XADD nplat:jobs
-  → status = published
-  → notification pending|retrying → queued
+A second request with the same `Idempotency-Key` gets the stored response back instead of a new notification. The same key with a different body gets 409.
 
-Worker consumer group
-  → XREADGROUP
-  → Redis lock nplat:lock:notif:{id}
-  → conditional UPDATE → processing
-  → provider adapter (timeout / transient / permanent / rate limit)
-  → delivered | retrying | dead
-  → XACK   (retries are re-enqueued later, not left to retry-storm the PEL)
+## Work
 
-Provider simulator
-  → optional Mailpit SMTP for email
-  → HMAC webhook POST /v1/webhooks/:provider
-  → webhook_events unique (provider, provider_event_id)
-```
+A dispatcher loop in each API process reads pending outbox rows and puts them on a Redis stream. The query claims rows with `FOR UPDATE SKIP LOCKED`, so two dispatchers do not publish the same row twice.
 
-Scheduled notifications skip the outbox on accept. The scheduler inserts the outbox row when `send_at <= now()`. Retries do the same when `next_attempt_at <= now()`.
+Workers read the stream, take a short Redis lock on the notification, mark it `processing`, and call the provider simulator. The simulator sends the email to Mailpit over SMTP and then posts a delivery status back to `/v1/webhooks/email`, which moves the notification to `delivered`. The worker passes the notification id to the provider as its idempotency key, so a repeated call returns the first result instead of sending again.
 
-## Processes
+If a worker crashes mid-job, the stream message is handed to another worker after a timeout (`VISIBILITY_TIMEOUT_MS`).
 
-| Process | State | Why it exists |
-|---|---|---|
-| API × N | stateless | accept, auth, read models, webhooks, outbox publish |
-| Worker × N | stateless | consume stream, call providers |
-| Scheduler × 1+ | stateless | due scan; Redis lock + SKIP LOCKED |
-| Provider simulator | ephemeral | realistic failure modes without Twilio/SendGrid |
-| PostgreSQL | durable source of truth | notifications, outbox, attempts, audit |
-| Redis | ephemeral / distributed | stream, locks, rate limits |
-| Nginx | LB | hide instance count from clients |
-| Prometheus / Grafana | observe | SLIs, not business logic |
+## Retry
 
-There is no extra “queue service.” Redis Streams *are* the queue. Kafka is omitted on purpose: it would add operational weight without changing the outbox or idempotency lessons.
+A failed attempt is written to `delivery_attempts`. A transient failure sets the notification to `retrying` with `next_attempt_at` (exponential backoff with jitter, 500 ms base, 30 s cap). The scheduler process polls for `retrying` rows whose `next_attempt_at` has passed and writes a new outbox row for each, so a retry goes through the same path as the first send.
 
-## Consistency model
+## Dead letter
 
-- **Strong** for accept + idempotency (one Postgres transaction).
-- **Eventual** for “accepted → delivered.” The UI must read `notifications.status`, not assume the 202 means the email arrived.
-- **At-least-once** from outbox to worker: publish can be retried; PEL reclaim redelivers.
-- **Effectively-once processing** via unique keys, conditional state updates, and provider idempotency keys.
+A permanent failure (for example a bad address), or running out of attempts (`MAX_ATTEMPTS`), sets the notification to `dead` and writes the job to the `nplat:jobs:dlq` stream. Nothing retries it after that.
 
-## Auth
+## Delivery guarantee
 
-- Tenant API keys: `nplat_live_…`, stored as prefix + SHA-256(pepper ∥ key), revocable and rotatable.
-- Admin JWT (HS256) for `/admin/*` only. Tenant keys cannot call admin routes.
+Delivery is at least once. A message can reach a worker twice (crash, timeout, replayed webhook). The idempotency key, the conditional status updates, and the provider-side idempotency key are what make that look like one email.
 
-## What is intentionally not here
+## Metrics, dashboard, deploy
 
-Kubernetes, Kafka, multi-region replication, real ESPs/SMS/push vendors, and a customer product UI. The console at `/` is a demo surface over this API: it shows rows the system already writes. The Compose stack is the reproducible local production shape.
+The API and workers expose Prometheus counters on `/metrics`:
+
+- `nplat_notifications_accepted_total` (accepted),
+- `nplat_deliveries_total{result="delivered"}` (delivered),
+- `nplat_deliveries_total{result="retry"}` (retrying),
+- `nplat_deliveries_total{result="dead"}` (dead).
+
+Prometheus scrapes them and one local Grafana dashboard plots those four.
+
+There is no Terraform in this repo. The deploy is the same Docker Compose stack on one host: `docker-compose.prod.yml` removes the host ports for Postgres, Redis, Prometheus, Grafana, and Mailpit and puts Nginx behind an existing edge proxy. Secrets (`JWT_SECRET`, `API_KEY_PEPPER`, `WEBHOOK_SECRET`, `ADMIN_PASSWORD`) come from a `.env` file on the host, which must not be committed.

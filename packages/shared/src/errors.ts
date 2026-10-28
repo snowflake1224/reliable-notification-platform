@@ -39,15 +39,3 @@ export class ValidationError extends AppError {
     super(message, 400, "validation_error");
   }
 }
-
-export class RateLimitedError extends AppError {
-  constructor(message = "Rate limited", readonly retryAfterMs = 1000) {
-    super(message, 429, "rate_limited", true);
-  }
-}
-
-export class ServiceUnavailableError extends AppError {
-  constructor(message = "Service unavailable") {
-    super(message, 503, "service_unavailable", true);
-  }
-}

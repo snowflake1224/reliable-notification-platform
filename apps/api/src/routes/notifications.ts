@@ -6,9 +6,8 @@ import { createNotification } from "../services/notificationService.js";
 const createSchema = z.object({
   userId: z.string().min(1),
   type: z.string().min(1),
-  channel: z.enum(["email", "sms", "push"]),
-  payload: z.record(z.unknown()).default({}),
-  sendAt: z.string().datetime().optional()
+  channel: z.literal("email").default("email"),
+  payload: z.record(z.unknown()).default({})
 });
 
 export const notificationRoutes = Router();
@@ -22,10 +21,8 @@ notificationRoutes.post("/", async (req, res, next) => {
       tenantId: req.tenant!.tenantId,
       externalUserId: body.userId,
       typeKey: body.type,
-      channel: body.channel,
       payload: body.payload,
       idempotencyKey,
-      sendAt: body.sendAt ? new Date(body.sendAt) : undefined,
       requestId: req.requestId
     });
     if (!result.replay) {
@@ -43,7 +40,7 @@ notificationRoutes.post("/", async (req, res, next) => {
 notificationRoutes.get("/:id", async (req, res, next) => {
   try {
     const { rows } = await req.deps.pool.query(
-      `SELECT id, status, channel, attempt_count, max_attempts, send_at, next_attempt_at,
+      `SELECT id, status, channel, attempt_count, max_attempts, next_attempt_at,
               provider_message_id, last_error_code, last_error_class, created_at, updated_at
        FROM notifications
        WHERE tenant_id = $1 AND id = $2`,
@@ -59,7 +56,7 @@ notificationRoutes.get("/:id", async (req, res, next) => {
 notificationRoutes.get("/:id/trace", async (req, res, next) => {
   try {
     const notification = await req.deps.pool.query(
-      `SELECT n.id, n.status, n.channel, n.attempt_count, n.max_attempts, n.send_at, n.next_attempt_at,
+      `SELECT n.id, n.status, n.channel, n.attempt_count, n.max_attempts, n.next_attempt_at,
               n.provider_message_id, n.last_error_code, n.last_error_class, n.created_at, n.updated_at,
               n.idempotency_key, n.rendered_subject, n.rendered_body,
               nt.key AS type_key, u.external_id AS external_user_id
@@ -141,7 +138,7 @@ notificationRoutes.get("/", async (req, res, next) => {
   try {
     const limit = Math.min(Number(req.query.limit ?? 50), 200);
     const { rows } = await req.deps.pool.query(
-      `SELECT n.id, n.status, n.channel, n.attempt_count, n.send_at, n.created_at, nt.key AS type_key
+      `SELECT n.id, n.status, n.channel, n.attempt_count, n.created_at, nt.key AS type_key
        FROM notifications n
        JOIN notification_types nt ON nt.id = n.notification_type_id
        WHERE n.tenant_id = $1

@@ -1,4 +1,4 @@
-export const CHANNELS = ["email", "sms", "push"] as const;
+export const CHANNELS = ["email"] as const;
 export type Channel = (typeof CHANNELS)[number];
 
 export const NOTIFICATION_STATUSES = [
@@ -8,8 +8,7 @@ export const NOTIFICATION_STATUSES = [
   "submitted",
   "retrying",
   "delivered",
-  "dead",
-  "cancelled"
+  "dead"
 ] as const;
 export type NotificationStatus = (typeof NOTIFICATION_STATUSES)[number];
 
@@ -18,8 +17,6 @@ export type ErrorClass = (typeof ERROR_CLASSES)[number];
 
 export const OUTBOX_STATUSES = ["pending", "publishing", "published", "failed"] as const;
 export type OutboxStatus = (typeof OUTBOX_STATUSES)[number];
-
-export type ProviderKind = "email" | "sms" | "push";
 
 export type FailureMode = "success" | "transient" | "permanent" | "timeout" | "rate_limit";
 
@@ -50,7 +47,6 @@ export interface NotificationRow {
   payload: Record<string, unknown>;
   rendered_subject: string | null;
   rendered_body: string | null;
-  send_at: Date;
   attempt_count: number;
   max_attempts: number;
   next_attempt_at: Date | null;

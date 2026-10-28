@@ -16,7 +16,6 @@ export * from "./db/seed.js";
 export * from "./redis/client.js";
 export * from "./queue/streams.js";
 export * from "./locking/lock.js";
-export * from "./rateLimit/limiter.js";
 export * from "./outbox/dispatcher.js";
 export * from "./provider/client.js";
 export * from "./http/metricsServer.js";

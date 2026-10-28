@@ -146,8 +146,6 @@ input[type="number"] {
 .status-delivered { color: var(--ok); }
 .status-retrying, .status-pending, .status-queued, .status-processing, .status-submitted { color: var(--amber); }
 .status-dead { color: var(--bad); }
-.status-cancelled { color: #b7c0d4; }
-
 .message {
   margin-top: 12px;
   padding: 12px;

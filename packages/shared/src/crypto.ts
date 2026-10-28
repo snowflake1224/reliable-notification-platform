@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 
 const scrypt = promisify(scryptCb);
@@ -33,22 +33,6 @@ export async function verifyPassword(password: string, stored: string): Promise<
 
 export function sha256(input: string): string {
   return createHash("sha256").update(input).digest("hex");
-}
-
-export function signWebhook(secret: string, timestamp: string, body: string): string {
-  return createHmac("sha256", secret).update(`${timestamp}.${body}`).digest("hex");
-}
-
-export function verifyWebhookSignature(
-  secret: string,
-  timestamp: string,
-  body: string,
-  signature: string
-): boolean {
-  const expected = Buffer.from(signWebhook(secret, timestamp, body), "hex");
-  const got = Buffer.from(signature.replace(/^sha256=/, ""), "hex");
-  if (expected.length !== got.length) return false;
-  return timingSafeEqual(expected, got);
 }
 
 export function randomId(prefix = ""): string {

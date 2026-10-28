@@ -70,10 +70,6 @@ export async function startHarness(failureMode = "success"): Promise<Harness> {
     PROVIDER_BASE_URL: provider.url,
     PROVIDER_TIMEOUT_MS: "400",
     ALLOW_TEST_FAILURES: "true",
-    API_RATE_LIMIT_PER_SEC: "1000",
-    EMAIL_RATE_LIMIT_PER_SEC: "1000",
-    SMS_RATE_LIMIT_PER_SEC: "1000",
-    PUSH_RATE_LIMIT_PER_SEC: "1000",
     MAX_ATTEMPTS: "3",
     VISIBILITY_TIMEOUT_MS: "2000"
   });
@@ -126,32 +122,23 @@ async function seed(pool: Pool, pepper: string) {
     [tenantId, DEMO_KEY.slice(0, 16), hashApiKey(DEMO_KEY, pepper)]
   );
   const type = await pool.query(
-    `INSERT INTO notification_types (tenant_id, key, name, category)
-     VALUES ($1,'order.shipped','Order shipped','transactional') RETURNING id`,
+    `INSERT INTO notification_types (tenant_id, key, name)
+     VALUES ($1,'order.shipped','Order shipped') RETURNING id`,
     [tenantId]
   );
-  const marketing = await pool.query(
-    `INSERT INTO notification_types (tenant_id, key, name, category)
-     VALUES ($1,'promo.weekly','Promo','marketing') RETURNING id`,
-    [tenantId]
+  const tpl = await pool.query(
+    `INSERT INTO templates (tenant_id, notification_type_id, channel, name)
+     VALUES ($1,$2,'email','order-shipped-email') RETURNING id`,
+    [tenantId, type.rows[0].id]
   );
-  for (const channel of ["email", "sms", "push"]) {
-    for (const typeId of [type.rows[0].id, marketing.rows[0].id]) {
-      const tpl = await pool.query(
-        `INSERT INTO templates (tenant_id, notification_type_id, channel, name)
-         VALUES ($1,$2,$3,$4) RETURNING id`,
-        [tenantId, typeId, channel, `${channel}-${typeId}`]
-      );
-      await pool.query(
-        `INSERT INTO template_versions (tenant_id, template_id, version, subject, body, status)
-         VALUES ($1,$2,1,'Hi {{name}}','Order {{orderId}}','published')`,
-        [tenantId, tpl.rows[0].id]
-      );
-    }
-  }
   await pool.query(
-    `INSERT INTO users (tenant_id, external_id, email, phone, push_token)
-     VALUES ($1,'user-1','a@test.local','+1','tok')`,
+    `INSERT INTO template_versions (tenant_id, template_id, version, subject, body, status)
+     VALUES ($1,$2,1,'Hi {{name}}','Order {{orderId}}','published')`,
+    [tenantId, tpl.rows[0].id]
+  );
+  await pool.query(
+    `INSERT INTO users (tenant_id, external_id, email)
+     VALUES ($1,'user-1','a@test.local')`,
     [tenantId]
   );
   await pool.query(
