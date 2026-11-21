@@ -1,26 +1,19 @@
 # Reliable Notification Platform
 
-A small email notification service built around one problem: **a retry must not send a second email.**
+An email notification platform built around one guarantee: **a retry must never send a second email.**
 
-`POST /v1/notifications` returns 202 as soon as the notification is stored in Postgres. A worker sends the email later. If sending fails, it retries with backoff; if it keeps failing, the notification ends up on a dead-letter list. Sending the same request again with the same `Idempotency-Key` returns the first result instead of a second email.
+`POST /v1/notifications` returns `202 Accepted` once the notification, transactional outbox row, and idempotency record commit together in PostgreSQL. Stateless dispatchers move outbox rows into Redis Streams, and workers acquire distributed locks before calling an idempotent email provider (captured safely by Mailpit).
 
-```mermaid
-flowchart LR
-  Client --> Nginx
-  Nginx --> Api1["API 1"]
-  Nginx --> Api2["API 2"]
-  Api1 --> Postgres
-  Api2 --> Postgres
-  Postgres -->|outbox| Redis["Redis stream"]
-  Redis --> Workers
-  Workers --> Provider["Provider simulator"]
-  Provider --> Mailpit
-  Provider -->|delivery status| Nginx
-```
+![Reliable Notification Platform Architecture](docs/diagrams/architecture.svg)
 
-Two copies of the same API run behind Nginx. Mailpit catches every email, so nothing reaches a real inbox. The design is explained on one page: [docs/architecture.md](docs/architecture.md).
+## Key Guarantees
 
-## Run it
+- **Transactional Outbox (`FOR UPDATE SKIP LOCKED`):** `notifications`, `outbox_events`, `audit_events`, and `idempotency_records` commit atomically so accepted work cannot be lost between DB commit and queue push.
+- **3-Layer Idempotency:** API `Idempotency-Key` SHA-256 request digest checking (`409` on payload mismatch, `202` replay on match), Redis `SET NX PX` + Lua token locks in workers, and provider-level `notificationId` idempotency keys.
+- **Backoff, PEL Reclaim & DLQ:** Failed transient deliveries enter `retrying` with full-jitter exponential backoff (`500 ms` base, `30 s` cap) and are re-enqueued by `apps/scheduler`; crashed worker jobs are reclaimed via Redis `XCLAIM`; permanent or exhausted failures route to `nplat:jobs:dlq`.
+- **Observability & Admin Console:** Prometheus counters/histograms on `/metrics`, Grafana dashboard (`:3011`), live outbox/attempt inspector console, and Mailpit inbox (`:8090/mailpit/`).
+
+## Quick Start
 
 Requires Docker with Compose v2.
 
@@ -29,7 +22,7 @@ docker compose up --build -d
 docker compose ps
 ```
 
-Wait until both APIs are healthy, then send one:
+Send a request, then repeat it with the same `Idempotency-Key` (`"replay": true`, still 1 email in Mailpit):
 
 ```bash
 curl http://localhost:8090/v1/notifications \
@@ -39,65 +32,39 @@ curl http://localhost:8090/v1/notifications \
   -d '{"userId":"user-1","type":"order.shipped","payload":{"name":"Ada","orderId":"42"}}'
 ```
 
-Run the same command again: you get the same id back with `"replay": true`, and Mailpit still shows one email. The seeded API key is public on purpose and only works on local demo data.
+Add `"_test":{"failureMode":"transient"}` or `"_test":{"failureMode":"permanent"}` to `payload` (with `ALLOW_TEST_FAILURES=true` in local Compose) to observe retries and dead-letter handling.
 
-To see a failure, add `"_test":{"failureMode":"transient"}` (retries, then dead) or `"_test":{"failureMode":"permanent"}` (dead straight away) to `payload`. This only works while `ALLOW_TEST_FAILURES=true`, which the local compose file sets.
-
-| Page | URL |
-|---|---|
+| Interface | URL |
+| --- | --- |
 | Console (outbox, attempts, retries, inbox) | http://localhost:8090/console/ |
 | Test inbox | http://localhost:8090/console/inbox/ |
 | Mailpit | http://localhost:8090/mailpit/ |
-| API docs | http://localhost:8090/docs/ |
-| Grafana dashboard | http://localhost:3011/d/nplat-overview |
+| API docs (OpenAPI) | http://localhost:8090/docs/ |
+| Grafana (`nplat-overview`) | http://localhost:3011/d/nplat-overview |
 | Prometheus | http://localhost:9093 |
 
 ![Test inbox](docs/assets/inbox.png)
 
-## One measured number
+## Verified Metrics & Tests
 
-On 2026-08-18, on a laptop, `node load-tests/run-bench.mjs` sent 25 requests per second for 20 seconds: 500 of 500 returned HTTP 202, and end-to-end p95 (accept to delivered) was about 1.83 s. That is one laptop observation, not production capacity. The run also mixed SMS and push requests, which this version no longer has.
-
-## Tradeoff
-
-Delivery is at least once, not exactly once. A worker can crash after the provider took the email but before the status was saved, and then the job runs again. What keeps that from becoming a second email is the idempotency key: the API stores one response per key, and the worker passes the notification id to the provider as its own idempotency key, so a repeat call gets the first result back.
-
-The provider simulator reports delivery by posting a status to `/v1/webhooks/email`. A real provider would sign that callback; here it only sends a shared secret.
-
-## Metrics and deploy
-
-The API and workers expose Prometheus counters on `/metrics` for accepted, delivered, retrying, and dead notifications. Prometheus scrapes them, and one Grafana dashboard (link above, anonymous read access) shows those four.
-
-There is no Terraform here. Deploying means running the same Compose stack on one host with the overlay:
-
-```bash
-cp env.production.example .env   # fill in every secret; never commit .env
-docker network create portfolio-edge 2>/dev/null || true
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
-```
-
-The overlay removes the host ports for Postgres, Redis, Prometheus, Grafana, and Mailpit, turns off the test failure switch, and attaches Nginx to an existing edge proxy network.
-
-## Development
+- **Automated Tests (`24` passing in CI):** `9` unit tests (`vitest`) + `15` Testcontainers integration tests covering outbox, idempotency conflicts, retries, DLQ, and stale stream reclaim.
+- **Historical Load Observation (`2026-08-18`):** `node load-tests/run-bench.mjs` at `25 RPS` for `20 s` returned `500/500` HTTP `202` with `~1.83 s` E2E p95 on a laptop Compose stack *(note: run predates removal of legacy SMS/push channels)*.
 
 ```bash
 npm ci
 npm run typecheck
 npm run build
 npx vitest run tests/unit
-npx vitest run tests/integration   # needs Docker (Testcontainers)
+npx vitest run tests/integration   # requires Docker
 ```
 
-## Layout
+## Documentation
 
-```text
-apps/api                 Express API, outbox dispatcher, delivery-status webhook
-apps/worker              reads the Redis stream and calls the provider
-apps/scheduler           re-enqueues retries once next_attempt_at has passed
-apps/provider-simulator  fake email provider: sends to Mailpit, posts status back
-apps/web                 console served by Nginx
-packages/shared          database, queue, locks, metrics, migrations
-infra                    Nginx, Prometheus, Grafana, Dockerfiles
-tests                    Vitest unit tests and Testcontainers integration tests
-load-tests               the load script behind the number above
-```
+| Document | Contents |
+| --- | --- |
+| [docs/architecture.md](docs/architecture.md) | High-level design, service boundaries, tradeoffs, and diagrams |
+| [docs/low-level-design.md](docs/low-level-design.md) | Module map, `SKIP LOCKED` SQL, lock lifecycle, failure recovery matrix |
+| [docs/algorithms-and-data-structures.md](docs/algorithms-and-data-structures.md) | Full-jitter backoff math, Lua locks, state machine invariants |
+| [docs/data-model.md](docs/data-model.md) | PostgreSQL schema, partial unique indexes, legacy column notes |
+| [docs/benchmarks-and-testing.md](docs/benchmarks-and-testing.md) | Unit/Testcontainers suites & `run-bench.mjs` benchmark context |
+| [docs/engineering-faq.md](docs/engineering-faq.md) | System design tradeoffs, guarantees, and 10x scaling answers |

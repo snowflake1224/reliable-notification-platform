@@ -330,7 +330,7 @@ homeRoutes.get("/", async (req, res, next) => {
         </div>
         <div class="group card">
           <h3>Checks</h3>
-          <div class="chips"><span class="chip">Vitest</span><span class="chip">Testcontainers</span><span class="chip">k6</span></div>
+          <div class="chips"><span class="chip">Vitest</span><span class="chip">Testcontainers</span><span class="chip">Node load script</span></div>
         </div>
         <div class="group card">
           <h3>Delivery</h3>
