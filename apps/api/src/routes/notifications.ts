@@ -7,7 +7,7 @@ const createSchema = z.object({
   userId: z.string().min(1),
   type: z.string().min(1),
   channel: z.literal("email").default("email"),
-  payload: z.record(z.unknown()).default({})
+  payload: z.record(z.string(), z.unknown()).default({})
 });
 
 export const notificationRoutes = Router();
