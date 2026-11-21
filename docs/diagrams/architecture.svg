@@ -1,0 +1,145 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 620" role="img" aria-labelledby="title desc">
+  <title id="title">Reliable Notification Platform Architecture</title>
+  <desc>End-to-end architecture: Nginx balances two stateless APIs writing a single PostgreSQL transaction (notification, outbox, idempotency), outbox dispatchers push to Redis Streams, three workers acquire Redis locks and deliver via a provider simulator to Mailpit with webhook status callbacks and retry scheduler recovery.</desc>
+  <defs>
+    <style>
+      .bg { fill: #0a0f1a; }
+      .grid { stroke: #162033; stroke-width: 1; }
+      .card { fill: #111927; stroke: #263449; stroke-width: 1.5; rx: 12; }
+      .card-accent { fill: #111927; stroke: #f59e0b; stroke-width: 1.75; rx: 12; }
+      .card-db { fill: #0f1b2d; stroke: #38bdf8; stroke-width: 1.75; rx: 12; }
+      .card-redis { fill: #1b1322; stroke: #f43f5e; stroke-width: 1.75; rx: 12; }
+      .card-obs { fill: #0f1c1a; stroke: #10b981; stroke-width: 1.5; rx: 12; }
+      .h1 { font: 700 18px 'Inter', system-ui, sans-serif; fill: #f8fafc; }
+      .sub { font: 500 12px 'Inter', system-ui, sans-serif; fill: #94a3b8; }
+      .box-title { font: 700 13.5px 'Inter', system-ui, sans-serif; fill: #f8fafc; }
+      .box-sub { font: 500 11.5px 'Inter', system-ui, sans-serif; fill: #94a3b8; }
+      .pill { fill: #1e293b; rx: 6; }
+      .pill-text { font: 600 10.5px ui-monospace, SFMono-Regular, Menlo, monospace; fill: #fbbf24; }
+      .arrow { stroke: #64748b; stroke-width: 1.75; fill: none; marker-end: url(#arr); }
+      .arrow-amber { stroke: #f59e0b; stroke-width: 2; fill: none; marker-end: url(#arr-amber); }
+      .arrow-sky { stroke: #38bdf8; stroke-width: 1.75; fill: none; marker-end: url(#arr-sky); }
+      .arrow-dash { stroke: #475569; stroke-width: 1.5; stroke-dasharray: 5 4; fill: none; marker-end: url(#arr); }
+      .lbl { font: 600 11px ui-monospace, SFMono-Regular, Menlo, monospace; fill: #cbd5e1; }
+      .lbl-amber { font: 600 11px ui-monospace, SFMono-Regular, Menlo, monospace; fill: #fcd34d; }
+    </style>
+    <marker id="arr" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#64748b"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#f59e0b"/>
+    </marker>
+    <marker id="arr-sky" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#38bdf8"/>
+    </marker>
+  </defs>
+
+  <rect width="1120" height="620" class="bg"/>
+  <g opacity="0.45">
+    <line x1="0" y1="80" x2="1120" y2="80" class="grid"/>
+    <line x1="0" y1="220" x2="1120" y2="220" class="grid"/>
+    <line x1="0" y1="360" x2="1120" y2="360" class="grid"/>
+    <line x1="0" y1="500" x2="1120" y2="500" class="grid"/>
+  </g>
+
+  <text x="32" y="38" class="h1">Reliable Notification Platform  System Architecture</text>
+  <text x="32" y="58" class="sub">Transactional Outbox + Redis Streams + Distributed Worker Locks + Exponential Backoff &amp; DLQ</text>
+
+  <!-- Client & Nginx -->
+  <rect x="32" y="120" width="165" height="96" class="card"/>
+  <text x="50" y="148" class="box-title">Tenant / Console</text>
+  <text x="50" y="168" class="box-sub">POST /v1/notifications</text>
+  <rect x="50" y="180" width="128" height="22" class="pill"/>
+  <text x="58" y="195" class="pill-text">Idempotency-Key</text>
+
+  <rect x="242" y="120" width="155" height="96" class="card-accent"/>
+  <text x="260" y="148" class="box-title">Nginx Edge (:8090)</text>
+  <text x="260" y="168" class="box-sub">least_conn load balancer</text>
+  <text x="260" y="186" class="box-sub">Routes /console, /v1, /mailpit</text>
+
+  <!-- API 1 & 2 -->
+  <rect x="445" y="96" width="215" height="68" class="card"/>
+  <text x="462" y="122" class="box-title">API Instance 1 (:8081)</text>
+  <text x="462" y="142" class="box-sub">Express API + OutboxDispatcher</text>
+
+  <rect x="445" y="178" width="215" height="68" class="card"/>
+  <text x="462" y="204" class="box-title">API Instance 2 (:8082)</text>
+  <text x="462" y="224" class="box-sub">Express API + OutboxDispatcher</text>
+
+  <!-- PostgreSQL -->
+  <rect x="425" y="302" width="255" height="122" class="card-db"/>
+  <text x="444" y="328" class="box-title">PostgreSQL 16 (Source of Truth)</text>
+  <text x="444" y="350" class="box-sub">Single TX: notifications + outbox_events</text>
+  <text x="444" y="368" class="box-sub">+ idempotency_records + audit_events</text>
+  <rect x="444" y="382" width="216" height="24" class="pill"/>
+  <text x="454" y="398" class="pill-text">FOR UPDATE SKIP LOCKED (100)</text>
+
+  <!-- Redis Streams -->
+  <rect x="740" y="114" width="200" height="114" class="card-redis"/>
+  <text x="758" y="142" class="box-title">Redis 7 (Queue + Locks)</text>
+  <text x="758" y="164" class="box-sub">Stream: nplat:jobs (group: workers)</text>
+  <text x="758" y="182" class="box-sub">Lock: SET NX PX + Lua unlock</text>
+  <rect x="758" y="194" width="150" height="22" class="pill"/>
+  <text x="768" y="209" class="pill-text">DLQ: nplat:jobs:dlq</text>
+
+  <!-- Workers -->
+  <rect x="740" y="294" width="200" height="106" class="card-accent"/>
+  <text x="758" y="322" class="box-title">3x Delivery Workers</text>
+  <text x="758" y="344" class="box-sub">XREADGROUP + XCLAIM reclaim</text>
+  <text x="758" y="362" class="box-sub">CAS processing -> submitted</text>
+  <text x="758" y="380" class="box-sub">Backoff: 500ms * 2^(n-1) + jitter</text>
+
+  <!-- Provider + Mailpit -->
+  <rect x="975" y="120" width="120" height="88" class="card"/>
+  <text x="990" y="148" class="box-title">Provider Sim</text>
+  <text x="990" y="168" class="box-sub">Idempotent on</text>
+  <text x="990" y="185" class="box-sub">notificationId</text>
+
+  <rect x="975" y="246" width="120" height="72" class="card"/>
+  <text x="990" y="274" class="box-title">Mailpit SMTP</text>
+  <text x="990" y="294" class="box-sub">Safe test inbox</text>
+
+  <!-- Retry Scheduler -->
+  <rect x="425" y="476" width="255" height="102" class="card"/>
+  <text x="444" y="504" class="box-title">Retry Scheduler (:9092)</text>
+  <text x="444" y="524" class="box-sub">Distributed Redis lock: scheduler:scan</text>
+  <text x="444" y="542" class="box-sub">Polls status='retrying' &amp; next_attempt_at</text>
+  <text x="444" y="560" class="box-sub">Re-inserts outbox_events (no duplicate row)</text>
+
+  <!-- Observability -->
+  <rect x="32" y="476" width="335" height="102" class="card-obs"/>
+  <text x="50" y="504" class="box-title">Observability &amp; Operations</text>
+  <text x="50" y="524" class="box-sub">Prometheus (:9093) scrapes /metrics on APIs,</text>
+  <text x="50" y="542" class="box-sub">Workers (:9091), and Scheduler (:9092).</text>
+  <text x="50" y="560" class="box-sub">Grafana (:3011) plots accepted / delivered / retry / dead</text>
+
+  <!-- Arrows -->
+  <path d="M 197 168 L 240 168" class="arrow-amber"/>
+  <path d="M 397 148 L 443 130" class="arrow-amber"/>
+  <path d="M 397 188 L 443 210" class="arrow-amber"/>
+
+  <path d="M 552 246 L 552 299" class="arrow-sky"/>
+  <text x="562" y="278" class="lbl">202 after commit</text>
+
+  <path d="M 660 156 L 737 156" class="arrow-amber"/>
+  <text x="673" y="145" class="lbl-amber">XADD</text>
+
+  <path d="M 840 228 L 840 291" class="arrow-amber"/>
+  <text x="848" y="264" class="lbl-amber">XREADGROUP</text>
+
+  <path d="M 740 356 L 683 356" class="arrow-sky"/>
+  <text x="687" y="346" class="lbl">attempt log</text>
+
+  <path d="M 940 326 L 962 326 L 962 164 L 972 164" class="arrow-amber"/>
+  <path d="M 1035 208 L 1035 243" class="arrow"/>
+
+  <!-- Webhook callback -->
+  <path d="M 1035 120 L 1035 74 L 319 74 L 319 117" class="arrow-dash"/>
+  <text x="520" y="68" class="lbl">POST /v1/webhooks/email (x-webhook-secret) -> status='delivered'</text>
+
+  <!-- Scheduler loop -->
+  <path d="M 552 476 L 552 427" class="arrow-sky"/>
+  <text x="562" y="458" class="lbl">re-enqueue due retries</text>
+
+  <path d="M 200 476 L 200 420 L 422 420" class="arrow-dash"/>
+</svg>

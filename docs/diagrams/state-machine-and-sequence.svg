@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 560" role="img" aria-labelledby="t2 d2">
+  <title id="t2">Notification State Machine and Idempotency Flow</title>
+  <desc>Exact notification lifecycle state machine from stateMachine.ts and request idempotency handling in notificationService.ts.</desc>
+  <defs>
+    <style>
+      .bg { fill: #0a0f1a; }
+      .panel { fill: #0f172a; stroke: #1e293b; stroke-width: 1.5; rx: 14; }
+      .st { fill: #111927; stroke: #334155; stroke-width: 1.5; rx: 10; }
+      .st-ok { fill: #0d211b; stroke: #10b981; stroke-width: 1.75; rx: 10; }
+      .st-warn { fill: #221a0c; stroke: #f59e0b; stroke-width: 1.75; rx: 10; }
+      .st-bad { fill: #251018; stroke: #f43f5e; stroke-width: 1.75; rx: 10; }
+      .h1 { font: 700 17px 'Inter', system-ui, sans-serif; fill: #f8fafc; }
+      .sub { font: 500 12px 'Inter', system-ui, sans-serif; fill: #94a3b8; }
+      .t { font: 700 13px ui-monospace, SFMono-Regular, Menlo, monospace; fill: #f8fafc; }
+      .b { font: 500 11.5px 'Inter', system-ui, sans-serif; fill: #cbd5e1; }
+      .arr { stroke: #64748b; stroke-width: 1.75; fill: none; marker-end: url(#m); }
+      .arr-ok { stroke: #10b981; stroke-width: 1.75; fill: none; marker-end: url(#m-ok); }
+      .arr-warn { stroke: #f59e0b; stroke-width: 1.75; fill: none; marker-end: url(#m-warn); }
+      .arr-bad { stroke: #f43f5e; stroke-width: 1.75; fill: none; marker-end: url(#m-bad); }
+      .lbl { font: 600 10.5px 'Inter', system-ui, sans-serif; fill: #94a3b8; }
+    </style>
+    <marker id="m" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 1 L10 5 L0 9 z" fill="#64748b"/></marker>
+    <marker id="m-ok" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 1 L10 5 L0 9 z" fill="#10b981"/></marker>
+    <marker id="m-warn" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 1 L10 5 L0 9 z" fill="#f59e0b"/></marker>
+    <marker id="m-bad" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 1 L10 5 L0 9 z" fill="#f43f5e"/></marker>
+  </defs>
+
+  <rect width="1120" height="560" class="bg"/>
+  <text x="32" y="38" class="h1">Notification State Machine &amp; Request Idempotency Rules</text>
+  <text x="32" y="58" class="sub">Enforced in packages/shared/src/stateMachine.ts and apps/api/src/services/notificationService.ts</text>
+
+  <!-- Top panel: State Machine -->
+  <rect x="32" y="78" width="1056" height="278" class="panel"/>
+  <text x="52" y="104" class="b" style="font-weight:700;fill:#e2e8f0">1. Notification Lifecycle (stateMachine.ts)</text>
+
+  <rect x="52" y="136" width="130" height="56" class="st"/>
+  <text x="76" y="160" class="t">pending</text>
+  <text x="72" y="178" class="lbl">202 TX commit</text>
+
+  <rect x="242" y="136" width="130" height="56" class="st"/>
+  <text x="272" y="160" class="t">queued</text>
+  <text x="258" y="178" class="lbl">XADD nplat:jobs</text>
+
+  <rect x="432" y="136" width="150" height="56" class="st-warn"/>
+  <text x="458" y="160" class="t">processing</text>
+  <text x="448" y="178" class="lbl">Redis lock + attempt</text>
+
+  <rect x="646" y="136" width="145" height="56" class="st"/>
+  <text x="676" y="160" class="t">submitted</text>
+  <text x="662" y="178" class="lbl">Provider accepted</text>
+
+  <rect x="862" y="136" width="175" height="56" class="st-ok"/>
+  <text x="902" y="160" class="t">delivered</text>
+  <text x="880" y="178" class="lbl">Webhook 200 (terminal)</text>
+
+  <rect x="432" y="266" width="150" height="56" class="st-warn"/>
+  <text x="470" y="290" class="t">retrying</text>
+  <text x="448" y="308" class="lbl">next_attempt_at + jitter</text>
+
+  <rect x="862" y="266" width="175" height="56" class="st-bad"/>
+  <text x="928" y="290" class="t">dead</text>
+  <text x="882" y="308" class="lbl">nplat:jobs:dlq (terminal)</text>
+
+  <path d="M 182 164 L 239 164" class="arr"/>
+  <path d="M 372 164 L 429 164" class="arr"/>
+  <path d="M 582 164 L 643 164" class="arr"/>
+  <path d="M 791 164 L 859 164" class="arr-ok"/>
+
+  <path d="M 507 192 L 507 263" class="arr-warn"/>
+  <text x="515" y="232" class="lbl">transient / 429 / timeout</text>
+
+  <path d="M 432 294 L 307 294 L 307 195" class="arr-warn"/>
+  <text x="315" y="285" class="lbl">Scheduler re-outbox</text>
+
+  <path d="M 582 184 L 740 245 L 859 282" class="arr-bad"/>
+  <text x="605" y="246" class="lbl">permanent / attempt &gt;= max_attempts</text>
+
+  <path d="M 791 182 L 859 272" class="arr-bad"/>
+  <text x="780" y="220" class="lbl">bounced/failed</text>
+
+  <!-- Bottom panel: 3-Layer Idempotency -->
+  <rect x="32" y="376" width="1056" height="156" class="panel"/>
+  <text x="52" y="402" class="b" style="font-weight:700;fill:#e2e8f0">2. Three-Layer Idempotency &amp; Deduplication Defense</text>
+
+  <rect x="52" y="422" width="318" height="90" class="st"/>
+  <text x="68" y="446" class="t">Ingress API Key Dedup</text>
+  <text x="68" y="466" class="b">SHA-256(user, type, payload) checked</text>
+  <text x="68" y="484" class="b">against idempotency_records FOR UPDATE.</text>
+  <text x="68" y="502" class="lbl" style="fill:#fbbf24">Match -> 202 replay | Mismatch -> 409 Conflict</text>
+
+  <rect x="401" y="422" width="318" height="90" class="st"/>
+  <text x="417" y="446" class="t">Worker Lock + Provider Key</text>
+  <text x="417" y="466" class="b">Redis SET NX PX prevents concurrent sends.</text>
+  <text x="417" y="484" class="b">Provider receives idempotencyKey = notif.id</text>
+  <text x="417" y="502" class="lbl" style="fill:#38bdf8">Crash before DB save still sends at most once</text>
+
+  <rect x="750" y="422" width="318" height="90" class="st"/>
+  <text x="766" y="446" class="t">Webhook Event Dedup</text>
+  <text x="766" y="466" class="b">UNIQUE (provider, provider_event_id) uses</text>
+  <text x="766" y="484" class="b">ON CONFLICT DO NOTHING; ignores replays</text>
+  <text x="766" y="502" class="lbl" style="fill:#10b981">Never regresses terminal delivered/dead row</text>
+</svg>

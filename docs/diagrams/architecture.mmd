@@ -1,0 +1,24 @@
+flowchart LR
+  Client["Client / Console\nPOST /v1/notifications\n+ Idempotency-Key"] --> Nginx["Nginx Edge (:8090)\nleast_conn proxy"]
+  Nginx --> Api1["API 1 (:8081)\nExpress + Outbox Dispatcher"]
+  Nginx --> Api2["API 2 (:8082)\nExpress + Outbox Dispatcher"]
+
+  Api1 -->|"Single TX:\nnotifications +\noutbox_events +\nidempotency_records"| PG[("PostgreSQL 16\nSource of Truth")]
+  Api2 -->|"FOR UPDATE SKIP LOCKED\n(claim batch 100)"| PG
+
+  Api1 -->|"XADD nplat:jobs"| Redis[("Redis 7\nStreams + Distributed Locks")]
+  Api2 -->|"XADD nplat:jobs"| Redis
+
+  Redis -->|"XREADGROUP (workers)\n+ XCLAIM PEL reclaim"| Workers["3 Workers (:9091)\nSET NX PX lock + Lua unlock"]
+  Workers -->|"idempotencyKey =\nnotificationId"| Provider["Provider Simulator\n(:4010)"]
+  Provider -->|SMTP| Mailpit["Mailpit\n(:1025 / :8025)"]
+  Provider -->|"POST /v1/webhooks/email\nx-webhook-secret"| Nginx
+
+  Workers -->|"Transient failure:\nstatus='retrying'\nnext_attempt_at"| PG
+  Workers -->|"Permanent / max attempts"| DLQ["Redis DLQ\nnplat:jobs:dlq"]
+  Scheduler["Retry Scheduler (:9092)\nRedis lock + SKIP LOCKED"] -->|"Due retries ->\noutbox_events"| PG
+
+  Prom["Prometheus (:9093)"] -.->|"scrapes /metrics"| Api1
+  Prom -.->|"scrapes /metrics"| Workers
+  Prom -.->|"scrapes /metrics"| Scheduler
+  Graf["Grafana (:3011)"] --> Prom
