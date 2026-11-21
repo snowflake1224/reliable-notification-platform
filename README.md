@@ -67,4 +67,4 @@ npx vitest run tests/integration   # requires Docker
 | [docs/algorithms-and-data-structures.md](docs/algorithms-and-data-structures.md) | Full-jitter backoff math, Lua locks, state machine invariants |
 | [docs/data-model.md](docs/data-model.md) | PostgreSQL schema, partial unique indexes, legacy column notes |
 | [docs/benchmarks-and-testing.md](docs/benchmarks-and-testing.md) | Unit/Testcontainers suites & `run-bench.mjs` benchmark context |
-| [docs/interview-guide.md](docs/interview-guide.md) | System design tradeoffs, guarantees, and 10x scaling answers |
+| [docs/engineering-faq.md](docs/engineering-faq.md) | System design tradeoffs, guarantees, and 10x scaling answers |

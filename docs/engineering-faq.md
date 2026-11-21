@@ -1,4 +1,4 @@
-# Interview & System Design Guide
+# Engineering FAQ
 
 ## 1. Why return `202` with a Transactional Outbox instead of pushing directly to Redis inside the HTTP handler?
 
