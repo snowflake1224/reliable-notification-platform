@@ -1,0 +1,17 @@
+stateDiagram-v2
+  [*] --> pending: POST /v1/notifications (TX commit + 202)
+  pending --> queued: OutboxDispatcher XADD nplat:jobs
+  pending --> dead: Admin / fatal error
+
+  queued --> processing: Worker acquires Redis lock + CAS update
+  queued --> dead: Permanent failure
+
+  processing --> submitted: Provider returns 2xx + providerMessageId
+  processing --> retrying: Transient error / timeout / 429\n(next_attempt_at = now + full_jitter)
+  processing --> dead: Permanent error OR attempt_count >= max_attempts\n-> XADD nplat:jobs:dlq
+
+  retrying --> queued: Scheduler polls due rows -> insert outbox_events
+  retrying --> dead: Exceeded attempts
+
+  submitted --> delivered: Webhook eventType='delivered'
+  submitted --> dead: Webhook eventType='bounced' | 'failed'

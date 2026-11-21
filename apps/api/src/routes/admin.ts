@@ -4,7 +4,8 @@ import {
   hashApiKey,
   NotFoundError,
   refreshQueueGauges,
-  verifyPassword
+  verifyPassword,
+  withTransaction
 } from "@nplat/shared";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
@@ -92,20 +93,26 @@ adminRoutes.post("/tenants/:id/api-keys/:keyId/revoke", requireAdmin, async (req
 
 adminRoutes.post("/tenants/:id/api-keys/:keyId/rotate", requireAdmin, async (req, res, next) => {
   try {
-    await req.deps.pool.query(
-      `UPDATE tenant_api_keys SET revoked_at = now()
-       WHERE id = $1 AND tenant_id = $2 AND revoked_at IS NULL`,
-      [req.params.keyId, req.params.id]
-    );
-    const generated = generateApiKey();
     const body = z.object({ name: z.string().default("rotated") }).parse(req.body ?? {});
-    const { rows } = await req.deps.pool.query(
-      `INSERT INTO tenant_api_keys (tenant_id, name, key_prefix, key_hash)
-       VALUES ($1,$2,$3,$4)
-       RETURNING id, name, key_prefix, created_at`,
-      [req.params.id, body.name, generated.prefix, hashApiKey(generated.raw, req.deps.config.apiKeyPepper)]
-    );
-    res.status(201).json({ ...rows[0], apiKey: generated.raw, rotatedFrom: req.params.keyId });
+    const generated = generateApiKey();
+    const rotated = await withTransaction(req.deps.pool, async (client) => {
+      const revoked = await client.query(
+        `UPDATE tenant_api_keys SET revoked_at = now()
+         WHERE id = $1 AND tenant_id = $2 AND revoked_at IS NULL`,
+        [req.params.keyId, req.params.id]
+      );
+      if (!revoked.rowCount) {
+        throw new NotFoundError("api key not found or already revoked");
+      }
+      const { rows } = await client.query(
+        `INSERT INTO tenant_api_keys (tenant_id, name, key_prefix, key_hash)
+         VALUES ($1,$2,$3,$4)
+         RETURNING id, name, key_prefix, created_at`,
+        [req.params.id, body.name, generated.prefix, hashApiKey(generated.raw, req.deps.config.apiKeyPepper)]
+      );
+      return rows[0];
+    });
+    res.status(201).json({ ...rotated, apiKey: generated.raw, rotatedFrom: req.params.keyId });
   } catch (err) {
     next(err);
   }
